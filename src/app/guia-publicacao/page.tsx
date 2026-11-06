@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { CodeBlock } from "@/components/ui/CopyButton";
 import { Logo } from "@/components/ui/Logo";
+import { neonSchemaSql } from "@/lib/neon-schema";
 
 export const metadata: Metadata = {
   title: "Guia de publicação · GitHub + Neon + Vercel | Cipriano Tech & Security",
@@ -52,9 +53,9 @@ git push -u origin main`,
     goal: "Ter um PostgreSQL serverless com a string de conexão segura.",
     body: [
       "Acesse neon.tech, crie um projeto (região aws-sa-east-1 / São Paulo para menor latência) e guarde a senha do usuário.",
-      "No painel do projeto, abra Connection Details, selecione o driver Node.js e copie a string que já vem com sslmode=require. Use a versão com o host -pooler para o app na Vercel.",
-      "O app usa Drizzle ORM. Com a string em mãos, aplique o schema no banco (cria tabelas de propostas, clientes, catálogo, atividades e configurações).",
-      "Opcional: cada branch do Neon cria um banco isolado. Use um banco de preview para testar mudanças de schema sem afetar produção.",
+      "No painel do projeto, abra Connect, escolha Node.js e copie a string com o host -pooler e sslmode=require. Se aparecer channel_binding=require, apague esse trecho antes de colar na Vercel.",
+      "Abra o SQL Editor do Neon, cole o script completo abaixo e clique em Run. Ele cria clientes, propostas, CRM, catálogo, manutenção, índices e configurações. Pode ser executado novamente sem apagar dados.",
+      "A última consulta do script precisa listar as 9 tabelas. Só depois disso faça o deploy ou o Redeploy na Vercel.",
     ],
     code: [
       {
@@ -144,7 +145,7 @@ Tipo: A       Nome: @           Valor: 76.76.21.21`,
 const checklist = [
   "Repositório privado no GitHub com o código versionado e .env fora do commit.",
   "DATABASE_URL configurada na Vercel (Production, Preview e Development).",
-  "Schema aplicado no Neon com npx drizzle-kit push.",
+  "Script SQL executado no SQL Editor do Neon e /api/health retornando ok.",
   "/api/health respondendo 200 no domínio final.",
   "Login do painel restrito (se publicado com dados reais, proteja o acesso).",
   "Backup do Neon habilitado (retenção de 7+ dias) e um dump mensal em local seguro.",
@@ -162,7 +163,11 @@ const troubleshooting = [
   },
   {
     problem: "Tabelas não existem em produção",
-    fix: "Rodar npx drizzle-kit push apontando para o banco de produção e depois executar um Redeploy para limpar cache.",
+    fix: "No Neon, abra SQL Editor e execute o script desta página. Depois faça Redeploy na Vercel.",
+  },
+  {
+    problem: "“This page couldn’t load” / server-side exception na Vercel",
+    fix: "Cadastre DATABASE_URL (ou conecte o Neon, que cria POSTGRES_URL), faça Redeploy e execute o SQL no Neon. Confirme em /api/health. Use a string -pooler; o app já ativa SSL e remove channel_binding.",
   },
   {
     problem: "PDF sem imagens ou fontes erradas",
@@ -218,6 +223,25 @@ export default function PublishingGuidePage() {
             <p className="mt-1 text-[10.5px] leading-snug text-steel">{step.goal}</p>
           </a>
         ))}
+      </section>
+
+      <section id="sql-neon" className="card mt-5 p-4 lg:p-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="label-mono text-signal">SQL Editor do Neon</div>
+            <h2 className="mt-1 font-display text-[18px] font-semibold text-white">Criar o banco completo</h2>
+            <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-steel">
+              No projeto do Neon, abra <b className="text-silver">SQL Editor</b>, cole o script e execute. Isso cria as
+              tabelas que a Vercel precisa e corrige o erro “This page couldn’t load” quando o banco ainda está vazio.
+            </p>
+          </div>
+          <a href="https://console.neon.tech" target="_blank" rel="noopener noreferrer" className="btn py-1.5 text-[11.5px]">
+            Abrir Neon ↗
+          </a>
+        </div>
+        <div className="mt-3">
+          <CodeBlock title="schema-neon.sql" language="sql" code={neonSchemaSql} />
+        </div>
       </section>
 
       <div className="mt-6 space-y-5">
