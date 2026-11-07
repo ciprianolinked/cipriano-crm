@@ -1,11 +1,17 @@
 import { ensureBootstrap, listClients, listProposals } from "@/lib/data";
 import { ClientManager, type ClientRecord } from "@/components/clients/ClientManager";
+import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClientsPage() {
-  await ensureBootstrap();
-  const [clients, proposals] = await Promise.all([listClients(), listProposals(true)]);
+  const loaded = await loadDatabasePage(async () => {
+    await ensureBootstrap();
+    const [clients, proposals] = await Promise.all([listClients(), listProposals(true)]);
+    return { clients, proposals };
+  });
+  if (!loaded.ok) return loaded.recovery;
+  const { clients, proposals } = loaded.data;
   const records: ClientRecord[] = clients.map((c) => {
     const linked = proposals.filter((p) => p.clientId === c.id);
     return {
@@ -35,8 +41,8 @@ export default async function ClientsPage() {
         <div className="label-mono text-signal">Base comercial</div>
         <h1 className="mt-2 font-display text-[clamp(1.5rem,2.6vw,2rem)] font-semibold text-white">Clientes e oportunidades</h1>
         <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-steel">
-          Cada cliente guarda contato, endereço, segmento, origem do lead e histórico de propostas — evita redigitar e
-          acelera a próxima venda.
+          Consulte um CNPJ para preencher os dados públicos da empresa ou cadastre manualmente. Contatos, endereço e
+          histórico de propostas ficam organizados para sua próxima venda.
         </p>
       </header>
       <div className="mt-4">

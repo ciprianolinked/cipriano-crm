@@ -27,6 +27,8 @@ export type DerivedContract = {
   hasDocument: boolean;
   generationSource: string;
   monthlyCents: number;
+  contractKind: string;
+  contractValueCents: number;
   startDate: string;
   cycleMonths: number;
   indexName: string;
@@ -100,10 +102,10 @@ export function deriveContract(c: MaintenanceContractRow, readjusts: ReadjustInp
     id: c.id, clientId: c.clientId, clientName: c.clientName, title: c.title, description: c.description,
     proposalId: c.proposalId, proposalNumber: c.proposalNumber, proposalRevision: c.proposalRevision,
     documentRevision: c.documentRevision, hasDocument: Boolean(c.contractText), generationSource: c.generationSource,
-    monthlyCents: c.monthlyCents, startDate: start.toISOString(), cycleMonths: c.cycleMonths,
+    monthlyCents: c.monthlyCents, contractKind: c.contractKind, contractValueCents: c.contractValueCents, startDate: start.toISOString(), cycleMonths: c.cycleMonths,
     indexName: c.indexName, status: c.status,
     lastReadjustAt: c.lastReadjustAt?.toISOString() ?? null, nextReadjustAt: next.toISOString(), lastReadjustPct: c.lastReadjustPct,
-    daysToReadjust: days, overdue: days < 0, alert: c.status === "ativo" && days <= 30,
+    daysToReadjust: days, overdue: c.contractKind === "manutencao" && days < 0, alert: c.contractKind === "manutencao" && c.status === "ativo" && days <= 30,
     accumulatedPct: Math.round(pct * 100), accumulatedMissing: actual?.missingMonths.length ?? 12, accumulatedTotal: 12,
     ipcaComplete: complete, indexComplete: complete,
     projectedCents: complete ? Math.round(c.monthlyCents * (1 + pct / 100)) : null,

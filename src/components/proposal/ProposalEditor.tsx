@@ -9,6 +9,7 @@ import { STAGES, type ProposalItem, type ProposalSection } from "@/lib/proposal/
 import { SECTION_LIBRARY } from "@/lib/proposal/generate";
 import { ProposalDocument, type DocData, type DocSettings } from "@/components/proposal/ProposalDocument";
 import { PrintActions } from "@/components/proposal/PrintActions";
+import { isMaintenanceProposal, maintenanceSummary } from "@/lib/proposal/maintenance-plan";
 
 export type EditorActivity = {
   id: string;
@@ -60,12 +61,14 @@ export function ProposalEditor({
   catalog,
   activities: initialActivities,
   revisions: initialRevisions = [],
+  contracts = [],
 }: {
   initial: EditorProposal;
   settings: DocSettings;
   catalog: EditorCatalogItem[];
   activities: EditorActivity[];
   revisions?: EditorRevision[];
+  contracts?: { id: string; title: string; kind: string; status: string; revision: number }[];
 }) {
   const router = useRouter();
   const [proposal, setProposal] = useState<EditorProposal>(initial);
@@ -81,6 +84,8 @@ export function ProposalEditor({
   const [revisionBusy, setRevisionBusy] = useState(false);
 
   const totals = useMemo(() => calcTotals(proposal.items, proposal.discountPct), [proposal.items, proposal.discountPct]);
+  const maintenanceProposal = isMaintenanceProposal(proposal.briefing);
+  const monthly = maintenanceSummary(proposal.items, proposal.discountPct, proposal.briefing);
 
   function update(patch: Partial<EditorProposal>) {
     setProposal((prev) => ({ ...prev, ...patch }));
@@ -143,6 +148,7 @@ export function ProposalEditor({
       deliveryTime: proposal.deliveryTime,
       warranty: proposal.warranty,
       artIncluded: proposal.artIncluded,
+      briefing: proposal.briefing,
       status: proposal.status,
       archived: proposal.archived,
       lossReason: proposal.lossReason,
@@ -301,16 +307,16 @@ export function ProposalEditor({
               {dirty ? "Alterações não salvas" : savedAt ? `Salvo ${savedAt}` : "Tudo salvo"}
             </span>
             <Link
-              href={`/manutencao/novo?proposta=${proposal.id}`}
+              href={`/contratos/novo?proposta=${proposal.id}`}
               className="btn !border-signal/35 !text-signal"
               onClick={(event) => {
                 if (dirty) {
                   event.preventDefault();
-                  window.alert("Salve as alterações da proposta antes de criar o contrato de manutenção.");
+                  window.alert("Salve as alterações da proposta antes de gerar o contrato.");
                 }
               }}
             >
-              Criar contrato de manutenção
+              Gerar contrato (opcional)
             </Link>
             <button className="btn" onClick={duplicate} disabled={saving}>
               Duplicar
@@ -356,6 +362,9 @@ export function ProposalEditor({
         </div>
 
         <aside className="no-print space-y-3">
+          <Panel title="Contratos da proposta" hint="Formalização opcional · não ativa serviços automaticamente">
+            {contracts.length ? <div className="space-y-2">{contracts.map((c) => <Link key={c.id} href={`/contratos/${c.id}`} className="block rounded-lg border border-line/50 bg-abyss2/40 p-2.5 hover:border-signal/40"><div className="text-[12px] font-medium text-silver">{c.title}</div><div className="mt-1 text-[10px] text-steel">{c.kind === "manutencao" ? "Manutenção mensal" : "Fornecimento / serviços"} · {c.status} · Minuta R{c.revision}</div></Link>)}</div> : <p className="text-[11px] leading-relaxed text-steel">Sem contrato vinculado. Se o cliente optar, use “Gerar contrato” após salvar esta revisão.</p>}
+          </Panel>
           <div className={`rounded-xl border p-3 ${dirty ? "border-amber/50 bg-amber/5" : "border-line/60 bg-navy/30"}`}>
             <div className="flex items-center justify-between">
               <div>
@@ -580,7 +589,7 @@ export function ProposalEditor({
 
           {tab === "itens" ? (
             <div className="space-y-3">
-              <Panel title="Investimento" hint="Calculado em tempo real">
+              <Panel title={maintenanceProposal ? "Mensalidade e vigência" : "Investimento"} hint="Calculado em tempo real">
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <Stat label="Subtotal" value={brl(totals.subtotalCents / 100)} />
                   <Stat label="Desconto" value={`${proposal.discountPct}%`} />
@@ -596,7 +605,7 @@ export function ProposalEditor({
                     onChange={(e) => update({ discountPct: Number(e.target.value) })}
                   />
                 </Field>
-                <div className="text-[11px] text-steel">12× de {brl(totals.installmentCents / 100)}</div>
+                <div className="text-[11px] text-steel">{maintenanceProposal ? `${brl(monthly.monthlyCents / 100)}/mês · ${monthly.months} meses · total ${brl(totals.totalCents / 100)}` : `12× de ${brl(totals.installmentCents / 100)}`}</div>
               </Panel>
 
               <Panel title="Itens da proposta" hint="Equipamentos e serviços">

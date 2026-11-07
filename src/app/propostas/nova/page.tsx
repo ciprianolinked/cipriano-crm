@@ -1,11 +1,16 @@
 import { ensureBootstrap, listClients } from "@/lib/data";
 import { NewProposalWizard } from "@/components/proposal/NewProposalWizard";
+import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewProposalPage() {
-  await ensureBootstrap();
-  const clients = await listClients();
+  const loaded = await loadDatabasePage(async () => {
+    await ensureBootstrap();
+    return listClients();
+  });
+  if (!loaded.ok) return loaded.recovery;
+  const clients = loaded.data;
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-5 lg:px-7 lg:py-7">
       <header className="border-b border-line/50 pb-4">
@@ -14,12 +19,13 @@ export default async function NewProposalPage() {
           Nova proposta em três etapas
         </h1>
         <p className="mt-1 max-w-3xl text-[12.5px] leading-relaxed text-steel">
-          Escolha o formato, informe quem é o cliente e descreva o escopo em números. A IA monta o documento com
-          timbrado Cipriano, precificação do catálogo, cláusulas técnicas e sugestões de venda.
+          Elabore uma proposta de projeto, produtos ou serviços, ou um plano de manutenção mensal preventiva e corretiva.
+          Revise os valores e, se o cliente optar, prepare também um contrato vinculado.
         </p>
       </header>
       <div className="mt-4">
         <NewProposalWizard
+          aiEnabled={Boolean(process.env.OPENAI_API_KEY)}
           clients={clients.map((c) => ({
             id: c.id,
             name: c.name,

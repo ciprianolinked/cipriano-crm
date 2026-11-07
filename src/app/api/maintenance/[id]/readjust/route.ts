@@ -12,6 +12,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const body = (await request.json()) as { pct?: number | string; manualPct?: number | string; indexName?: string; note?: string; agreedChange?: boolean };
   const [contract] = await db.select().from(maintenanceContracts).where(eq(maintenanceContracts.id, id)).limit(1);
   if (!contract) return NextResponse.json({ error: "Contrato não encontrado." }, { status: 404 });
+  if (contract.contractKind !== "manutencao") return NextResponse.json({ error: "Reajuste recorrente é exclusivo de contratos de manutenção mensal." }, { status: 400 });
   if (contract.status !== "ativo") return NextResponse.json({ error: "Ative o contrato antes de aplicar um reajuste." }, { status: 400 });
   const due = nextReadjustDate(contract);
   if (daysUntil(due) > 0) return NextResponse.json({ error: "O reajuste ainda não venceu. A comparação é uma simulação; aplique a partir da data de aniversário." }, { status: 400 });

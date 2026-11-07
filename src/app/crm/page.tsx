@@ -6,11 +6,17 @@ import { formatPct } from "@/lib/maintenance";
 import { Kanban, type KanbanCard } from "@/components/crm/Kanban";
 import { FollowUps, type FollowUpItem } from "@/components/crm/FollowUps";
 import { STAGES } from "@/lib/proposal/types";
+import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
 
 export default async function CrmPage() {
-  const [stats, maintenance] = await Promise.all([dashboardStats(), getMaintenanceData()]);
+  const loaded = await loadDatabasePage(async () => {
+    const [stats, maintenance] = await Promise.all([dashboardStats(), getMaintenanceData()]);
+    return { stats, maintenance };
+  });
+  if (!loaded.ok) return loaded.recovery;
+  const { stats, maintenance } = loaded.data;
   const cards: KanbanCard[] = stats.rows.map((p) => ({
     id: p.id,
     number: p.number,

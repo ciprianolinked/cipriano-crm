@@ -1,37 +1,21 @@
 import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
 import { ensureBootstrap, listClients } from "@/lib/data";
+import { parseClientInput } from "@/lib/client-input";
+import { normalizeDocument } from "@/lib/cnpj";
 
 export const dynamic = "force-dynamic";
-
-export async function GET() {
-  await ensureBootstrap();
-  return NextResponse.json({ clients: await listClients() });
-}
-
+export async function GET() { await ensureBootstrap(); return NextResponse.json({ clients: await listClients() }); }
 export async function POST(request: Request) {
-  const body = (await request.json()) as Record<string, unknown>;
-  const name = String(body.name ?? "").trim();
-  if (!name) return NextResponse.json({ error: "Nome do cliente é obrigatório." }, { status: 400 });
-
-  const [row] = await db
-    .insert(clients)
-    .values({
-      name,
-      company: String(body.company ?? "") || null,
-      contactName: String(body.contactName ?? "") || null,
-      email: String(body.email ?? "") || null,
-      phone: String(body.phone ?? "") || null,
-      document: String(body.document ?? "") || null,
-      address: String(body.address ?? "") || null,
-      city: String(body.city ?? "") || null,
-      state: String(body.state ?? "") || null,
-      segment: String(body.segment ?? "") || null,
-      source: String(body.source ?? "") || null,
-      notes: String(body.notes ?? "") || null,
-    })
-    .returning();
-
+  let values: ReturnType<typeof parseClientInput>;
+  try { values = parseClientInput(await request.json()); }
+  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Dados inválidos." }, { status: 400 }); }
+  if (values.document) {
+    const [existing] = await db.select({ id: clients.id }).from(clients).where(sql`upper(regexp_replace(${clients.document}, '[^a-zA-Z0-9]', '', 'g')) = ${normalizeDocument(values.document)}`).limit(1);
+    if (existing) return NextResponse.json({ error: "Já existe um cliente com esse documento. Localize-o na lista para editar.", clientId: existing.id }, { status: 409 });
+  }
+  const [row] = await db.insert(clients).values({ ...values, name: values.name! }).returning();
   return NextResponse.json({ client: row }, { status: 201 });
 }

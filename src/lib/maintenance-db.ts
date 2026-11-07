@@ -1,4 +1,4 @@
-import { asc, desc } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { ipcaHistory, maintenanceContracts, maintenanceReadjusts } from "@/db/schema";
 import { deriveContract, type DerivedContract, type IpcaRow } from "@/lib/maintenance";
@@ -19,7 +19,7 @@ export async function getMaintenanceData(): Promise<{
   monthlyActiveCents: number;
 }> {
   const [contracts, readjusts, observations] = await Promise.all([
-    db.select().from(maintenanceContracts).orderBy(asc(maintenanceContracts.nextReadjustAt)),
+    db.select().from(maintenanceContracts).where(eq(maintenanceContracts.contractKind, "manutencao")).orderBy(asc(maintenanceContracts.nextReadjustAt)),
     db.select().from(maintenanceReadjusts),
     getIndexObservations(),
   ]);

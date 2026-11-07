@@ -1,4 +1,7 @@
 import { notFound } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { maintenanceContracts } from "@/db/schema";
 import {
   ensureBootstrap,
   getSettings,
@@ -9,25 +12,30 @@ import {
 } from "@/lib/data";
 import { ProposalEditor, type EditorActivity } from "@/components/proposal/ProposalEditor";
 import { isProposalType, type ProposalType } from "@/lib/proposal/types";
+import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProposalEditorPage({ params }: { params: Promise<{ id: string }> }) {
-  await ensureBootstrap();
   const { id } = await params;
-  const result = await proposalWithClient(id);
-  if (!result) notFound();
-  const [settings, catalog] = await Promise.all([getSettings(), listCatalog()]);
-  const { proposal } = result;
-  const activities: EditorActivity[] = (await listActivities(id)).map((a) => ({
-    id: a.id,
-    kind: a.kind,
-    content: a.content,
-    dueAt: a.dueAt ? a.dueAt.toISOString() : null,
-    doneAt: a.doneAt ? a.doneAt.toISOString() : null,
-    createdAt: a.createdAt.toISOString(),
-  }));
-  const revisions = await listRevisions(id);
+  const loaded = await loadDatabasePage(async () => {
+    await ensureBootstrap();
+    const result = await proposalWithClient(id);
+    if (!result) notFound();
+    const [settings, catalog, activityRows, revisions, contracts] = await Promise.all([
+      getSettings(), listCatalog(), listActivities(id), listRevisions(id),
+      db.select({ id: maintenanceContracts.id, title: maintenanceContracts.title, kind: maintenanceContracts.contractKind, status: maintenanceContracts.status, revision: maintenanceContracts.documentRevision }).from(maintenanceContracts).where(eq(maintenanceContracts.proposalId, id)),
+    ]);
+    const activities: EditorActivity[] = activityRows.map((a) => ({
+      id: a.id, kind: a.kind, content: a.content,
+      dueAt: a.dueAt ? a.dueAt.toISOString() : null,
+      doneAt: a.doneAt ? a.doneAt.toISOString() : null,
+      createdAt: a.createdAt.toISOString(),
+    }));
+    return { proposal: result.proposal, settings, catalog, activities, revisions, contracts };
+  });
+  if (!loaded.ok) return loaded.recovery;
+  const { proposal, settings, catalog, activities, revisions, contracts } = loaded.data;
 
   return (
     <ProposalEditor
@@ -82,6 +90,7 @@ export default async function ProposalEditorPage({ params }: { params: Promise<{
         priceCents: c.priceCents,
       }))}
       activities={activities}
+      contracts={contracts}
       revisions={revisions.map((r) => ({
         id: r.id,
         number: r.number,

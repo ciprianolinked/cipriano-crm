@@ -94,6 +94,8 @@ export const maintenanceContracts = pgTable("maintenance_contracts", {
   clientName: text("client_name").notNull(),
   title: text("title").notNull(),
   description: text("description"),
+  contractKind: text("contract_kind").notNull().default("manutencao"),
+  contractValueCents: integer("contract_value_cents").notNull().default(0),
   proposalId: uuid("proposal_id"),
   proposalNumber: text("proposal_number"),
   proposalRevision: integer("proposal_revision"),

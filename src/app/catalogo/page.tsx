@@ -1,11 +1,16 @@
 import { ensureBootstrap, listCatalog } from "@/lib/data";
 import { CatalogManager } from "@/components/catalog/CatalogManager";
+import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
 
 export default async function CatalogPage() {
-  await ensureBootstrap();
-  const items = await listCatalog();
+  const loaded = await loadDatabasePage(async () => {
+    await ensureBootstrap();
+    return listCatalog();
+  });
+  if (!loaded.ok) return loaded.recovery;
+  const items = loaded.data;
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-5 lg:px-7 lg:py-7">
       <header className="border-b border-line/50 pb-4">

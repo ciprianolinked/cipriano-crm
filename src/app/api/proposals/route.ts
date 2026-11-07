@@ -5,6 +5,7 @@ import { activities, proposals } from "@/db/schema";
 import { ensureBootstrap, nextProposalNumber } from "@/lib/data";
 import { calcTotals, defaultBriefing } from "@/lib/proposal/catalog";
 import { generateProposal } from "@/lib/proposal/generate";
+import { validateMaintenancePlan } from "@/lib/proposal/maintenance-plan";
 import { isProposalType, type Briefing, type ProposalDraft } from "@/lib/proposal/types";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,12 @@ export async function POST(request: Request) {
   const type = body.type && isProposalType(body.type) ? body.type : "completa";
   const { getSettings } = await import("@/lib/data");
   const settings = await getSettings();
+
+  const incomingBriefing = body.draft?.briefing ?? body.briefing;
+  if (incomingBriefing?.purpose === "manutencao_mensal") {
+    try { incomingBriefing.maintenancePlan = validateMaintenancePlan(incomingBriefing.maintenancePlan); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Dados de manutenção inválidos." }, { status: 400 }); }
+  }
 
   let draft: ProposalDraft;
   if (body.draft) {

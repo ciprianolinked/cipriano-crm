@@ -28,7 +28,26 @@ export type ProposalSection = {
   locked?: boolean;
 };
 
+export type MaintenancePlan = {
+  preventive: boolean;
+  corrective: boolean;
+  visitsPerMonth: number;
+  correctiveVisitsPerMonth: number;
+  responseHours: number;
+  serviceHours: string;
+  coveredEquipment: string;
+  partsCoverage: string;
+  monthlyPrice: number;
+  termMonths: number;
+  dueDay: number;
+  startDate: string;
+  indexName: string;
+};
+
 export type Briefing = {
+  purpose?: "projeto" | "manutencao_mensal";
+  maintenancePlan?: MaintenancePlan;
+  wantsContract?: boolean;
   segment: string;
   cameras: number;
   doors: number;

@@ -1,5 +1,6 @@
 import { brand } from "@/lib/brand";
 import { calcTotals, suggestDiscount } from "@/lib/proposal/catalog";
+import { generateMaintenanceProposal } from "@/lib/proposal/maintenance-plan";
 import type {
   Briefing,
   ProposalDraft,
@@ -570,6 +571,7 @@ export function generateProposal(input: {
   settings?: Partial<GeneratorSettings>;
 }): ProposalDraft {
   const settings = { ...defaultGeneratorSettings, ...input.settings };
+  if (input.briefing.purpose === "manutencao_mensal") return generateMaintenanceProposal({ ...input, settings });
   const briefing = input.briefing;
   const artIncluded = input.artIncluded ?? input.type === "completa";
   const validityDays = input.validityDays ?? settings.defaultValidityDays;

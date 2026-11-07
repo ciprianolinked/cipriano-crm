@@ -1,444 +1,80 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ArrowRight, Check, FileCheck2, FileText, LoaderCircle, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { brl } from "@/lib/brand";
 import { PRIORITIES, SEGMENTS, defaultBriefing } from "@/lib/proposal/catalog";
-import { PROPOSAL_TYPES, type Briefing, type ProposalDraft, type ProposalType, type Totals } from "@/lib/proposal/types";
+import { defaultMaintenancePlan, maintenanceSummary, validateMaintenancePlan } from "@/lib/proposal/maintenance-plan";
+import { MaintenancePlanFields } from "@/components/proposal/MaintenancePlanFields";
+import { PROPOSAL_TYPES, type Briefing, type MaintenancePlan, type ProposalDraft, type ProposalType, type Totals } from "@/lib/proposal/types";
 import type { Insight } from "@/lib/ai";
 
-type ClientOption = {
-  id: string;
-  name: string;
-  contactName: string | null;
-  email: string | null;
-  address: string | null;
-  city: string | null;
-  state: string | null;
-};
+type ClientOption = { id: string; name: string; contactName: string | null; email: string | null; address: string | null; city: string | null; state: string | null };
+type Preview = { draft: ProposalDraft; totals: Totals; insights: Insight[]; aiNote: string; error?: string };
 
-type PreviewResponse = {
-  draft: ProposalDraft;
-  totals: Totals;
-  insights: Insight[];
-  aiNote: string;
-  error?: string;
-};
-
-const PRESETS: { label: string; briefing: Briefing; type: ProposalType }[] = [
-  {
-    label: "Condomínio · 8 câmeras + acesso",
-    type: "completa",
-    briefing: { ...defaultBriefing, cameras: 8, doors: 2, fenceMeters: 60, monitoring: true },
-  },
-  {
-    label: "Indústria · 16 câmeras + ART",
-    type: "completa",
-    briefing: {
-      ...defaultBriefing,
-      segment: "Indústria / galpão",
-      cameras: 16,
-      doors: 4,
-      fenceMeters: 120,
-      alarm: true,
-      monitoring: true,
-      maintenance: true,
-      priority: "tecnica",
-    },
-  },
-  {
-    label: "Loja · 4 câmeras (rápida)",
-    type: "simples",
-    briefing: { ...defaultBriefing, segment: "Varejo / loja", cameras: 4, doors: 1, fenceMeters: 0, monitoring: false },
-  },
-  {
-    label: "Reposição de produtos",
-    type: "produtos_servicos",
-    briefing: { ...defaultBriefing, segment: "Varejo / loja", cameras: 3, doors: 0, fenceMeters: 0, monitoring: false, maintenance: false, priority: "orcamento" },
-  },
-];
-
-export function NewProposalWizard({ clients }: { clients: ClientOption[] }) {
+export function NewProposalWizard({ clients, aiEnabled = false }: { clients: ClientOption[]; aiEnabled?: boolean }) {
   const router = useRouter();
+  const [purpose, setPurpose] = useState<"projeto" | "manutencao_mensal">("projeto");
   const [type, setType] = useState<ProposalType>("completa");
-  const [clientId, setClientId] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [contact, setContact] = useState("");
-  const [clientEmail, setClientEmail] = useState("");
-  const [site, setSite] = useState("");
-  const [validityDays, setValidityDays] = useState(15);
-  const [artIncluded, setArtIncluded] = useState(true);
+  const [info, setInfo] = useState({ clientId: "", clientName: "", contact: "", clientEmail: "", site: "", validityDays: 15, artIncluded: true });
   const [briefing, setBriefing] = useState<Briefing>(defaultBriefing);
+  const [plan, setPlan] = useState<MaintenancePlan>(defaultMaintenancePlan);
   const [rawNotes, setRawNotes] = useState("");
-  const [preview, setPreview] = useState<PreviewResponse | null>(null);
+  const [wantsContract, setWantsContract] = useState(false);
+  const [polish, setPolish] = useState(false);
+  const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-
+  const [error, setError] = useState("");
+  const maintenance = purpose === "manutencao_mensal";
+  function invalidate() { setPreview(null); setError(""); }
+  function updateInfo(patch: Partial<typeof info>) { setInfo((p) => ({ ...p, ...patch })); invalidate(); }
+  function updateBriefing(patch: Partial<Briefing>) { setBriefing((p) => ({ ...p, ...patch })); invalidate(); }
   function applyClient(id: string) {
-    setClientId(id);
-    const client = clients.find((c) => c.id === id);
-    if (!client) return;
-    setClientName(client.name);
-    setContact(client.contactName ?? "");
-    setClientEmail(client.email ?? "");
-    setSite([client.address, client.city && client.state ? `${client.city}/${client.state}` : client.city].filter(Boolean).join(" — "));
+    const c = clients.find((p) => p.id === id);
+    if (!c) { updateInfo({ clientId: "", clientName: "", contact: "", clientEmail: "", site: "" }); return; }
+    updateInfo({ clientId: id, clientName: c.name, contact: c.contactName ?? "", clientEmail: c.email ?? "", site: [c.address, [c.city, c.state].filter(Boolean).join("/")].filter(Boolean).join(" — ") });
   }
-
-  function applyPreset(index: number) {
-    const preset = PRESETS[index];
-    setType(preset.type);
-    setBriefing(preset.briefing);
-    setArtIncluded(preset.type === "completa");
-    setPreview(null);
-  }
-
-  function num(key: keyof Briefing, value: number) {
-    setBriefing((prev) => ({ ...prev, [key]: Math.max(0, value) }));
-    setPreview(null);
-  }
-
   async function generate() {
+    setError("");
+    if (!info.clientName.trim()) { setError("Informe o nome do cliente."); return; }
+    if (info.validityDays < 1 || info.validityDays > 365) { setError("A validade deve ser de 1 a 365 dias."); return; }
+    if (maintenance) { try { validateMaintenancePlan(plan); } catch (err) { setError(err instanceof Error ? err.message : "Confira a manutenção."); return; } }
     setLoading(true);
     try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type,
-          briefing: { ...briefing, rawNotes },
-          clientName,
-          contact,
-          clientEmail,
-          site,
-          validityDays,
-          artIncluded,
-        }),
-      });
-      const data = (await res.json()) as PreviewResponse;
+      const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...info, type, polish, artIncluded: maintenance ? false : info.artIncluded, briefing: { ...briefing, purpose, wantsContract, ...(maintenance ? { maintenance: true, maintenancePlan: plan } : {}), rawNotes } }) });
+      const data = await res.json() as Preview;
+      if (!res.ok || !data.draft) throw new Error(data.error || "Não foi possível gerar. Tente novamente.");
       setPreview(data);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(err instanceof Error ? err.message : "Falha de conexão."); }
+    finally { setLoading(false); }
   }
-
-  async function createProposal(status: "novo" | "enviada") {
+  async function save(status: "novo" | "enviada") {
     if (!preview) return;
-    setSaving(true);
+    setSaving(true); setError("");
     try {
-      const res = await fetch("/api/proposals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type,
-          clientId: clientId || null,
-          clientName,
-          contact,
-          clientEmail,
-          site,
-          status,
-          draft: { ...preview.draft, briefing },
-        }),
-      });
-      const data = (await res.json()) as { proposal?: { id: string }; error?: string };
-      if (data.proposal) router.push(`/propostas/${data.proposal.id}`);
-    } finally {
-      setSaving(false);
-    }
+      const res = await fetch("/api/proposals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type, clientId: info.clientId || null, status, draft: { ...preview.draft, briefing: { ...preview.draft.briefing, wantsContract } } }) });
+      const data = await res.json() as { proposal?: { id: string }; error?: string };
+      if (!res.ok || !data.proposal) throw new Error(data.error || "Não foi possível salvar a proposta.");
+      router.push(wantsContract ? `/contratos/novo?proposta=${data.proposal.id}` : `/propostas/${data.proposal.id}`);
+    } catch (err) { setError(err instanceof Error ? err.message : "Falha ao salvar."); }
+    finally { setSaving(false); }
   }
+  const monthly = preview ? maintenanceSummary(preview.draft.items, preview.draft.discountPct, preview.draft.briefing) : null;
 
-  return (
-    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-      <div className="space-y-4">
-        <section className="card p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <div className="label-mono text-signal">Etapa 1</div>
-              <h2 className="font-display text-lg font-semibold text-white">Escolha o formato</h2>
-            </div>
-            <span className="text-[11px] text-steel">Comece pelo template, ajuste depois no editor.</span>
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {PROPOSAL_TYPES.map((option) => (
-              <button
-                key={option.id}
-                onClick={() => {
-                  setType(option.id);
-                  setArtIncluded(option.id === "completa");
-                  setPreview(null);
-                }}
-                className={`rounded-xl border p-3 text-left transition ${
-                  type === option.id
-                    ? "border-signal/60 bg-signal/10"
-                    : "border-line/60 bg-abyss2/40 hover:border-signal/30"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-display text-[13px] font-semibold text-white">{option.short}</span>
-                  {type === option.id ? <span className="text-signal">●</span> : null}
-                </div>
-                <p className="mt-1 text-[11px] leading-snug text-steel">{option.description}</p>
-                <div className="mt-2 font-mono text-[9px] uppercase tracking-[0.14em] text-signal/80">{option.pages}</div>
-              </button>
-            ))}
-          </div>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            <span className="label-mono mr-1 py-1">Atalhos:</span>
-            {PRESETS.map((preset, i) => (
-              <button key={preset.label} onClick={() => applyPreset(i)} className="chip hover:border-signal/50 hover:text-signal">
-                {preset.label}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="card p-4">
-          <div className="label-mono text-signal">Etapa 2</div>
-          <h2 className="font-display text-lg font-semibold text-white">Cliente e local</h2>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="block sm:col-span-2">
-              <span className="label-mono mb-1 block">Cliente cadastrado</span>
-              <select className="field" value={clientId} onChange={(e) => applyClient(e.target.value)}>
-                <option value="">Novo cliente / digitar abaixo</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="label-mono mb-1 block">Nome do cliente *</span>
-              <input className="field" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Nome do cliente" />
-            </label>
-            <label className="block">
-              <span className="label-mono mb-1 block">Contato / cargo</span>
-              <input className="field" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Contato · cargo" />
-            </label>
-            <label className="block">
-              <span className="label-mono mb-1 block">E-mail</span>
-              <input className="field" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} placeholder="contato@cliente.com.br" />
-            </label>
-            <label className="block">
-              <span className="label-mono mb-1 block">Local da instalação</span>
-              <input className="field" value={site} onChange={(e) => setSite(e.target.value)} placeholder="Rua, número — bairro, cidade/UF" />
-            </label>
-            <label className="block">
-              <span className="label-mono mb-1 block">Validade (dias)</span>
-              <input type="number" className="field" value={validityDays} onChange={(e) => setValidityDays(Number(e.target.value))} />
-            </label>
-            <label className="flex items-end gap-2 pb-2 text-[12px] text-silver">
-              <input type="checkbox" checked={artIncluded} onChange={(e) => setArtIncluded(e.target.checked)} />
-              Incluir ART, projeto executivo e as-built
-            </label>
-          </div>
-        </section>
-
-        <section className="card p-4">
-          <div className="label-mono text-signal">Etapa 3</div>
-          <h2 className="font-display text-lg font-semibold text-white">Briefing em 60 segundos</h2>
-          <p className="text-[11px] text-steel">
-            Números definem escopo, itens e valor. A IA completa o texto técnico e sugere cláusulas.
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {(
-              [
-                ["cameras", "Câmeras IP"],
-                ["doors", "Portas com acesso"],
-                ["fenceMeters", "Perímetro (m)"],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key} className="block">
-                <span className="label-mono mb-1 block">{label}</span>
-                <input
-                  type="number"
-                  min={0}
-                  className="field"
-                  value={briefing[key]}
-                  onChange={(e) => num(key, Number(e.target.value))}
-                />
-              </label>
-            ))}
-            <label className="block">
-              <span className="label-mono mb-1 block">Segmento</span>
-              <select
-                className="field"
-                value={briefing.segment}
-                onChange={(e) => setBriefing((p) => ({ ...p, segment: e.target.value }))}
-              >
-                {SEGMENTS.map((segment) => (
-                  <option key={segment} value={segment}>
-                    {segment}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {(
-              [
-                ["monitoring", "Monitoramento NOC 24h"],
-                ["alarm", "Alarme monitorado"],
-                ["intercom", "Interfonia IP"],
-                ["network", "Rede / rack"],
-                ["maintenance", "Manutenção preventiva"],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => {
-                  setBriefing((prev) => ({ ...prev, [key]: !prev[key] }));
-                  setPreview(null);
-                }}
-                className={`chip ${briefing[key] ? "border-signal/60 bg-signal/10 text-signal" : ""}`}
-              >
-                {briefing[key] ? "✓ " : "+ "}
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="label-mono mb-1 block">Prioridade do cliente</span>
-              <select
-                className="field"
-                value={briefing.priority}
-                onChange={(e) => setBriefing((p) => ({ ...p, priority: e.target.value as Briefing["priority"] }))}
-              >
-                {PRIORITIES.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-              <span className="mt-1 block text-[10.5px] text-steel">
-                {PRIORITIES.find((p) => p.id === briefing.priority)?.hint}
-              </span>
-            </label>
-            <label className="block">
-              <span className="label-mono mb-1 block">Texto livre (cole do WhatsApp)</span>
-              <textarea
-                className="field min-h-[64px]"
-                value={rawNotes}
-                onChange={(e) => {
-                  setRawNotes(e.target.value);
-                  setPreview(null);
-                }}
-                placeholder="Ex.: condomínio quer 10 câmeras, 2 portas com facial, 80 m de cerca e monitoramento 24h, urgente."
-              />
-            </label>
-          </div>
-          <p className="mt-2 text-[10.5px] text-steel">
-            A IA lê o texto livre e extrai quantidades, tecnologias e prioridade — evita redigitar briefing.
-          </p>
-        </section>
-
-        <div className="flex flex-wrap gap-2">
-          <button className="btn btn-primary" onClick={generate} disabled={loading || !clientName.trim()}>
-            {loading ? "Montando proposta…" : "Gerar proposta com IA"}
-          </button>
-          <Link href="/propostas" className="btn">
-            Cancelar
-          </Link>
-        </div>
-      </div>
-
-      <aside className="space-y-3">
-        <div className="card p-4">
-          <div className="flex items-center justify-between">
-            <span className="label-mono text-signal">Prévia inteligente</span>
-            <span className="chip">{PROPOSAL_TYPES.find((t) => t.id === type)?.short}</span>
-          </div>
-          {!preview ? (
-            <div className="mt-3 space-y-2 text-[12px] leading-relaxed text-steel">
-              <p>
-                O motor Cipriano monta o documento com <b className="text-silver">itens do catálogo</b>, escopo técnico,
-                normas, aterramento, matriz de responsabilidade e condições padrão.
-              </p>
-              <ul className="space-y-1.5">
-                {[
-                  "Outorga e ART automáticas quando o projeto é de maior valor",
-                  "Desconto sugerido por volume (3% a 10%)",
-                  "Alerta de upsell de NOC e manutenção",
-                  "Follow-up D+2 criado ao enviar",
-                ].map((item) => (
-                  <li key={item} className="flex gap-2">
-                    <span className="text-signal">▸</span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <div className="mt-3 space-y-3">
-              <div className="rounded-lg border border-line/60 bg-abyss2/60 p-3">
-                <div className="label-mono">Investimento total</div>
-                <div className="font-display text-2xl font-bold text-signal">{brl(preview.totals.totalCents / 100)}</div>
-                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-steel">
-                  <span>{preview.draft.items.length} itens</span>
-                  <span>desconto {preview.draft.discountPct}%</span>
-                  <span>12× {brl(preview.totals.installmentCents / 100)}</span>
-                </div>
-              </div>
-              <div>
-                <div className="label-mono mb-1">Leitura do consultor</div>
-                <div className="space-y-1.5">
-                  {preview.insights.map((insight) => (
-                    <div
-                      key={insight.title}
-                      className={`rounded-lg border p-2 ${
-                        insight.tone === "danger"
-                          ? "border-alarm/40 bg-alarm/5"
-                          : insight.tone === "warn"
-                            ? "border-amber/40 bg-amber/5"
-                            : insight.tone === "ok"
-                              ? "border-armed/40 bg-armed/5"
-                              : "border-network/40 bg-network/5"
-                      }`}
-                    >
-                      <div className="text-[11.5px] font-medium text-silver">{insight.title}</div>
-                      <p className="text-[10.5px] leading-snug text-steel">{insight.detail}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-lg border border-line/60 bg-navy/30 p-2 text-[10.5px] leading-relaxed text-steel">
-                {preview.aiNote}
-              </div>
-              <div className="space-y-2">
-                <div className="label-mono">Blocos gerados ({preview.draft.sections.filter((s) => s.enabled).length})</div>
-                <div className="flex flex-wrap gap-1">
-                  {preview.draft.sections.filter((s) => s.enabled).map((section) => (
-                    <span key={section.id} className="chip">
-                      {section.title}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <button className="btn btn-primary" onClick={() => createProposal("enviada")} disabled={saving}>
-                  {saving ? "Criando…" : "Criar e marcar como enviada"}
-                </button>
-                <button className="btn" onClick={() => createProposal("novo")} disabled={saving}>
-                  Salvar como rascunho
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="card p-4">
-          <div className="label-mono mb-2 text-signal">Como economizar tempo</div>
-          <ul className="space-y-2 text-[11.5px] leading-relaxed text-steel">
-            <li>• Reaproveite propostas anteriores com “Duplicar” e ajuste só o cliente e as quantidades.</li>
-            <li>• Use os atalhos de briefing: 80% dos seus projetos partem de 4 configurações.</li>
-            <li>• Mantenha o catálogo atualizado — o valor e a tabela saem sem redigitar especificação.</li>
-            <li>• Envie sempre com follow-up D+2 agendado: é onde a maioria dos negócios fecha.</li>
-          </ul>
-        </div>
-      </aside>
+  return <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="space-y-4">
+      <section className="card p-5"><div className="label-mono text-signal">Etapa 1 · objetivo</div><h2 className="mt-1 font-display text-lg font-semibold text-white">Qual proposta vamos elaborar?</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{([{ id: "projeto", title: "Projeto, produtos ou serviços", text: "Fornecimento, instalação ou serviço avulso.", Icon: FileText }, { id: "manutencao_mensal", title: "Manutenção mensal", text: "Preventiva e corretiva, com cobrança recorrente.", Icon: Wrench }] as const).map(({ id, title, text, Icon }) => <button type="button" key={id} className={`rounded-xl border p-4 text-left transition hover:border-signal/50 ${purpose === id ? "border-signal/55 bg-signal/[0.07]" : "border-line/60 bg-abyss2/40"}`} onClick={() => { setPurpose(id); invalidate(); }}><div className="flex items-center justify-between"><Icon size={19} className={purpose === id ? "text-signal" : "text-steel"}/>{purpose === id ? <Check size={15} className="text-signal"/> : null}</div><div className="mt-3 font-display text-[14px] font-semibold text-white">{title}</div><p className="mt-1 text-[11px] leading-relaxed text-steel">{text}</p></button>)}</div><div className="mt-5 border-t border-line/40 pt-4"><div className="label-mono mb-2">Formato do documento</div><div className="grid gap-2 sm:grid-cols-3">{PROPOSAL_TYPES.map((t) => <button type="button" key={t.id} onClick={() => { setType(t.id); invalidate(); }} className={`rounded-lg border p-3 text-left ${type === t.id ? "border-signal/50 bg-signal/5" : "border-line/50"}`}><div className={`text-[12px] font-medium ${type === t.id ? "text-signal" : "text-silver"}`}>{t.short}</div><p className="mt-1 text-[10px] leading-relaxed text-steel">{t.id === "completa" ? "Escopo e condições detalhados" : t.id === "simples" ? "Uma apresentação objetiva" : "Orçamento com itens e condições"}</p></button>)}</div></div></section>
+      <section className="card p-5"><div className="label-mono text-signal">Etapa 2 · destinatário</div><h2 className="mt-1 font-display text-lg font-semibold text-white">Cliente e local</h2><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="block sm:col-span-2"><span className="label-mono mb-1.5 block">Cliente cadastrado</span><select className="field" value={info.clientId} onChange={(e) => applyClient(e.target.value)}><option value="">Digitar cliente manualmente</option>{clients.map((c) => <option value={c.id} key={c.id}>{c.name}</option>)}</select><p className="mt-1.5 text-[10.5px] text-steel">Precisa buscar os dados da empresa? <Link href="/clientes" className="text-signal hover:underline">Cadastre pelo CNPJ em Clientes →</Link></p></label><Field label="Nome do cliente *"><input className="field" value={info.clientName} onChange={(e) => updateInfo({ clientName: e.target.value })} placeholder="Nome do cliente"/></Field><Field label="Contato / cargo"><input className="field" value={info.contact} onChange={(e) => updateInfo({ contact: e.target.value })} placeholder="Responsável"/></Field><Field label="E-mail"><input className="field" type="email" value={info.clientEmail} onChange={(e) => updateInfo({ clientEmail: e.target.value })}/></Field><Field label="Local da prestação de serviços"><input className="field" value={info.site} onChange={(e) => updateInfo({ site: e.target.value })}/></Field><Field label="Validade da proposta (dias)"><input className="field" type="number" min={1} max={365} value={info.validityDays} onChange={(e) => updateInfo({ validityDays: Number(e.target.value) })}/></Field>{!maintenance ? <label className="flex items-center gap-2 text-[12px] text-silver"><input type="checkbox" checked={info.artIncluded} onChange={(e) => updateInfo({ artIncluded: e.target.checked })}/>Incluir ART / projeto executivo</label> : null}</div></section>
+      <section className="card p-5"><div className="label-mono text-signal">Etapa 3 · escopo e valores</div><h2 className="mt-1 font-display text-lg font-semibold text-white">{maintenance ? "Plano de manutenção mensal" : "Briefing técnico"}</h2><p className="mt-1 mb-4 text-[11px] leading-relaxed text-steel">{maintenance ? "Defina o que está incluído, os limites de atendimento e o valor de cada mês." : "Informe as quantidades e tecnologias previstas para este projeto."}</p>{maintenance ? <MaintenancePlanFields value={plan} onChange={(p) => { setPlan(p); invalidate(); }}/> : <><div className="grid grid-cols-2 gap-3">{([["cameras", "Câmeras IP"], ["doors", "Portas com acesso"], ["fenceMeters", "Perímetro (m)"]] as const).map(([key, label]) => <Field key={key} label={label}><input className="field" type="number" min={0} value={briefing[key]} onChange={(e) => updateBriefing({ [key]: Number(e.target.value) })}/></Field>)}<Field label="Segmento"><select className="field" value={briefing.segment} onChange={(e) => updateBriefing({ segment: e.target.value })}>{SEGMENTS.map((s) => <option key={s}>{s}</option>)}</select></Field></div><div className="mt-3 flex flex-wrap gap-2">{([["monitoring", "Monitoramento"], ["alarm", "Alarme"], ["intercom", "Interfonia"], ["network", "Rede / rack"], ["maintenance", "Adicionar manutenção"]] as const).map(([key, label]) => <button type="button" key={key} onClick={() => updateBriefing({ [key]: !briefing[key] })} className={`chip ${briefing[key] ? "!border-signal/50 !text-signal bg-signal/10" : ""}`}>{briefing[key] ? "✓ " : "+ "}{label}</button>)}</div><div className="mt-4 grid gap-3 sm:grid-cols-2"><Field label="Prioridade"><select className="field" value={briefing.priority} onChange={(e) => updateBriefing({ priority: e.target.value as Briefing["priority"] })}>{PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></Field><Field label="Informações adicionais"><textarea className="field min-h-[75px]" value={rawNotes} onChange={(e) => { setRawNotes(e.target.value); invalidate(); }} placeholder="Descrição da necessidade do cliente"/></Field></div></>}</section>
+      <section className="card p-4"><label className="flex cursor-pointer items-start gap-3"><input type="checkbox" className="mt-1 accent-cyan-400" checked={wantsContract} onChange={(e) => setWantsContract(e.target.checked)}/><span><span className="flex items-center gap-2 font-display text-[14px] font-semibold text-white"><FileCheck2 size={16} className="text-signal"/> Elaborar contrato após salvar (opcional)</span><span className="mt-1 block text-[11px] leading-relaxed text-steel">Marque se o cliente deseja formalizar a proposta em contrato. Você revisará a minuta em uma etapa separada; nada é ativado ou enviado automaticamente.</span></span></label></section>
+      {aiEnabled ? <label className="flex items-center gap-2 text-[11px] text-steel"><input type="checkbox" checked={polish} onChange={(e) => { setPolish(e.target.checked); invalidate(); }}/> Refinar a redação do escopo com a IA configurada no servidor.</label> : null}
+      {error ? <div role="alert" className="rounded-lg border border-alarm/35 bg-alarm/5 p-3 text-[12px] text-alarm">{error}</div> : null}
+      <div className="flex gap-2"><button type="button" className="btn btn-primary px-5 py-3" disabled={loading || saving} onClick={generate}>{loading ? <LoaderCircle size={15} className="animate-spin"/> : <Sparkles size={15}/>} {loading ? "Elaborando…" : preview ? "Gerar novamente" : "Elaborar proposta"}</button><Link href="/propostas" className="btn">Cancelar</Link></div>
     </div>
-  );
+    <aside className="space-y-4 xl:sticky xl:top-5"><section className="card overflow-hidden"><div className="border-b border-line/50 p-4"><div className="label-mono text-signal">Resumo</div><h2 className="mt-1 font-display text-[16px] font-semibold text-white">{maintenance ? "Sua proposta de manutenção" : "Sua proposta comercial"}</h2></div><div className="p-4">{preview ? <div className="space-y-4"><div className="rounded-xl border border-signal/25 bg-signal/5 p-4"><div className="label-mono">{maintenance ? "Mensalidade" : "Investimento total"}</div><div className="mt-1 font-display text-[25px] font-semibold text-signal">{brl((maintenance ? monthly!.monthlyCents : preview.totals.totalCents) / 100)}{maintenance ? <span className="ml-1 text-sm font-normal text-steel">/mês</span> : null}</div><div className="mt-2 text-[11px] text-steel">{maintenance ? `${monthly!.months} meses · total do período ${brl(monthly!.totalCents / 100)}` : `${preview.draft.items.length} itens · ${preview.draft.discountPct}% de desconto`}</div></div><div className="space-y-2">{preview.insights.map((i) => <div key={i.title} className="rounded-lg border border-line/50 bg-abyss2/40 p-3"><div className="text-[11.5px] font-medium text-silver">{i.title}</div><p className="mt-1 text-[10.5px] leading-relaxed text-steel">{i.detail}</p></div>)}</div><p className="text-[10.5px] leading-relaxed text-steel">{preview.aiNote}</p><div className="flex flex-wrap gap-1">{preview.draft.sections.filter((s) => s.enabled).map((s) => <span key={s.id} className="chip !text-[8px] !tracking-normal !normal-case">{s.title}</span>)}</div><div className="space-y-2"><button type="button" className="btn btn-primary w-full" disabled={saving || loading} onClick={() => save("novo")}>{saving ? "Salvando…" : wantsContract ? "Salvar e preparar contrato" : "Salvar rascunho e editar"}<ArrowRight size={14}/></button><button type="button" className="btn w-full" disabled={saving || loading} onClick={() => save("enviada")}>Salvar e marcar como enviada</button><p className="text-[10px] leading-relaxed text-steel">“Enviada” é apenas uma etapa do CRM. O sistema não envia e-mail ao cliente.</p></div></div> : <div className="flex min-h-[170px] flex-col items-center justify-center text-center"><FileText size={26} className="text-steel/60"/><p className="mt-3 text-[12px] text-silver">Preencha os dados e elabore a proposta.</p><p className="mt-1 text-[11px] leading-relaxed text-steel">Os valores e blocos aparecem aqui antes de salvar.</p></div>}</div></section><section className="rounded-xl border border-line/60 bg-navy/30 p-4"><ShieldCheck size={18} className="text-signal"/><h3 className="mt-2 font-display text-[14px] font-semibold text-white">Você revisa antes de formalizar</h3><p className="mt-2 text-[11px] leading-relaxed text-steel">Proposta e contrato são documentos separados. Gere o contrato somente se o cliente optar, ajuste as cláusulas e consulte um advogado antes de assinar.</p></section></aside>
+  </div>;
 }
+function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block"><span className="label-mono mb-1.5 block">{label}</span>{children}</label>; }

@@ -1,54 +1,128 @@
 import type { ClientRow, ProposalRow, SettingsRow } from "@/db/schema";
 import type { ProposalItem } from "@/lib/proposal/types";
 import { brl, fmtDate } from "@/lib/brand";
+import { getMaintenancePlan, isMaintenanceProposal, maintenanceSummary } from "@/lib/proposal/maintenance-plan";
 
-export function recurringItems(items: ProposalItem[]) {
-  return items.filter((item) => /^(m[eê]s|mensal|meses)$/i.test(item.unit.trim()));
+export type ContractKind = "manutencao" | "proposta";
+export function recurringItems(items: ProposalItem[]) { return items.filter((i) => /^(m[eê]s|mensal|meses)$/i.test(i.unit.trim())); }
+export function suggestedMonthlyValue(items: ProposalItem[], briefing?: unknown, discountPct = 0): number {
+  if (isMaintenanceProposal(briefing)) return maintenanceSummary(items, discountPct, briefing).monthlyCents / 100;
+  return Math.round(recurringItems(items).reduce((sum, item) => sum + Math.max(0, item.price), 0) * (1 - discountPct / 100) * 100) / 100;
 }
-
-/** O preço unitário mensal é tomado uma vez; qty pode representar os 12 meses do contrato. */
-export function suggestedMonthlyValue(items: ProposalItem[]): number {
-  return recurringItems(items).reduce((sum, item) => sum + Math.max(0, item.price), 0);
-}
-
-export function proposalSnapshot(proposal: ProposalRow) {
-  return {
-    id: proposal.id,
-    number: proposal.number,
-    revision: proposal.revision,
-    clientName: proposal.clientName,
-    contact: proposal.contact,
-    clientEmail: proposal.clientEmail,
-    site: proposal.site,
-    items: proposal.items,
-    sections: proposal.sections,
-    paymentTerms: proposal.paymentTerms,
-    warranty: proposal.warranty,
-    issuedAt: proposal.issuedAt.toISOString(),
-  };
+export function proposalSnapshot(p: ProposalRow) {
+  return { id: p.id, number: p.number, revision: p.revision, type: p.type, clientName: p.clientName, contact: p.contact, clientEmail: p.clientEmail, site: p.site, items: p.items, sections: p.sections, paymentTerms: p.paymentTerms, deliveryTime: p.deliveryTime, warranty: p.warranty, totalCents: p.totalCents, discountPct: p.discountPct, briefing: p.briefing, issuedAt: p.issuedAt.toISOString() };
 }
 
 export function makeContractDraft(input: {
-  proposal: ProposalRow;
-  client: ClientRow | null;
-  settings: SettingsRow;
-  monthlyCents: number;
-  startDate: Date;
-  indexName: string;
-  description: string;
+  proposal: ProposalRow; client: ClientRow | null; settings: SettingsRow; monthlyCents: number; startDate: Date;
+  indexName: string; description: string; contractKind?: ContractKind;
 }): string {
   const { proposal: p, client, settings, monthlyCents, startDate, indexName, description } = input;
-  const recurring = recurringItems(p.items);
-  const scopeSection = p.sections.find((s) => s.enabled && /escopo/i.test(s.title));
+  const kind = input.contractKind ?? "manutencao";
+  const maintenance = kind === "manutencao";
+  const plan = getMaintenancePlan(p.briefing);
   const clientName = client?.company || p.clientName;
   const clientDocument = client?.document || "[CNPJ/CPF DO CLIENTE A PREENCHER]";
   const clientAddress = [client?.address, client?.city, client?.state].filter(Boolean).join(" — ") || p.site || "[ENDEREÇO DO CLIENTE A PREENCHER]";
-  const scope = description.trim() || recurring.map((item) => `${item.desc}${item.spec ? `: ${item.spec}` : ""}`).join("; ") || "[DESCREVER OS SERVIÇOS DE MANUTENÇÃO CONTRATADOS]";
-  const inheritedScope = scopeSection?.body ? `\nTrecho do escopo da proposta para conferência (somente o que for contratado abaixo):\n${scopeSection.body}` : "";
+  const recurring = recurringItems(p.items);
+  const scope = p.sections.find((s) => s.enabled && /escopo/i.test(s.title))?.body || "[CONFERIR ESCOPO NA PROPOSTA]";
+  const object = p.sections.find((s) => s.id === "objeto" && s.enabled)?.body || "[DESCREVER OBJETO DA PROPOSTA]";
+  const exclusions = p.sections.find((s) => s.id === "fora_escopo" && s.enabled)?.body || "Serviços e materiais não expressamente listados dependem de orçamento e aprovação prévios.";
+  const itemText = (maintenance ? recurring : p.items).map((item) => `• ${item.desc} — ${item.qty} ${item.unit} × ${brl(item.price)}. ${item.spec || ""}`).join("\n") || "[CONFERIR ITENS CONTRATADOS]";
   const monthly = monthlyCents > 0 ? brl(monthlyCents / 100) : "[VALOR MENSAL A DEFINIR]";
-  const recurringText = recurring.length
-    ? recurring.map((item) => `• ${item.desc} — valor unitário mensal da proposta: ${brl(item.price)}. ${item.spec || ""}`).join("\n")
-    : "[NENHUM ITEM MENSAL IDENTIFICADO NA PROPOSTA — CONFERIR ESCOPO E VALOR]";
+  const total = brl(p.totalCents / 100);
+  const scopeText = description.trim() || (maintenance && plan ? `${plan.coveredEquipment}\n\n${scope}` : scope);
+  const payment = maintenance
+    ? `A contratante pagará ${monthly} por mês, com vencimento no dia ${plan?.dueDay ?? "[A DEFINIR]"}, mediante emissão de documento fiscal aplicável. A forma de pagamento é a constante da proposta anexa, se compatível com esta cobrança mensal, ou [FORMA A DEFINIR]. Encargos de atraso serão expressamente negociados: [DEFINIR]. O valor de instalação ou fornecimento avulso não se confunde com esta mensalidade.`
+    : `O valor total de referência é ${total}, conforme os itens, quantidades e desconto da proposta ${p.number}, revisão ${p.revision}. Pagamento: ${p.paymentTerms || "[CONDIÇÕES A DEFINIR]"}. Tributos, frete e deslocamentos seguirão o que estiver expressamente indicado na proposta; encargos de atraso e demais condições: [DEFINIR]. Nenhuma cobrança de manutenção mensal é criada por este instrumento, salvo previsão expressa no seu escopo.`;
+  const sla = maintenance && plan
+    ? `Resposta inicial em até ${plan.responseHours} hora(s) úteis. Horário contratado: ${plan.serviceHours}. ${plan.preventive ? `${plan.visitsPerMonth} visita(s) preventiva(s) por mês.` : "Sem preventiva incluída."} ${plan.corrective ? `Até ${plan.correctiveVisitsPerMonth} visita(s) corretiva(s) por mês.` : "Sem corretiva incluída."} A resposta inicial não é prazo garantido de solução; intervenções que exigem peças ou terceiros serão reprogramadas após diagnóstico e comunicação.`
+    : maintenance ? "Prazos de resposta, horários, frequência preventiva e limites dos chamados corretivos: [CONFIRMAR COM O CLIENTE]." : `Prazo de entrega/execução: ${p.deliveryTime || "[PRAZO A DEFINIR]"}. As condições para início e o cronograma deverão ser confirmados por escrito, incluindo liberações de acesso e infraestrutura necessárias. Entrega técnica e aceite: [DEFINIR CRITÉRIOS E RESPONSÁVEL].`;
 
-  return `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE MANUTENÇÃO MENSAL\n\nPARTES CONTRATANTES\n\nCONTRATADA: ${settings.legalName}, nome fantasia ${settings.companyName}, inscrita no CNPJ sob nº ${settings.cnpj}, com endereço em ${settings.address}, neste ato representada por ${settings.director}, ${settings.role}, contato ${settings.email}, telefone ${settings.phone}.\n\nCONTRATANTE: ${clientName}, inscrito(a) no CNPJ/CPF sob nº ${clientDocument}, com endereço em ${clientAddress}, representado(a) por ${p.contact || "[NOME E QUALIFICAÇÃO DO REPRESENTANTE]"}, e-mail ${p.clientEmail || "[E-MAIL DO CLIENTE]"}.\n\nAs partes celebram o presente instrumento, vinculado à proposta ${p.number}, revisão ${String(p.revision).padStart(2, "0")}, que o integra como anexo, observadas as condições a seguir. Havendo divergência, prevalecerá o texto deste contrato, salvo ajuste escrito posterior.\n\n1. OBJETO E LOCAL\n\nPrestação de serviços contínuos de manutenção de sistemas de segurança eletrônica, no endereço ${p.site || "[LOCAL DE PRESTAÇÃO DOS SERVIÇOS]"}, conforme os serviços expressamente contratados neste instrumento e na proposta anexa.\n\n2. ESCOPO DOS SERVIÇOS\n\n${scope}\n\nItens recorrentes identificados na proposta:\n${recurringText}\n${inheritedScope}\n\nA frequência das visitas preventivas, as rotinas de teste, os equipamentos cobertos e os chamados corretivos deverão ser confirmados pelas partes: [DETALHAR FREQUÊNCIA, INVENTÁRIO E SERVIÇOS INCLUÍDOS]. Qualquer serviço fora desses limites dependerá de orçamento e aprovação prévios.\n\n3. PRAZOS DE ATENDIMENTO E COMUNICAÇÃO\n\nOs chamados serão abertos pelos canais ${settings.phone} e ${settings.email}, nos horários acordados. Prazo de resposta: [DEFINIR SLA E HORÁRIO]. Prazo de visita técnica: [DEFINIR PRAZO E ÁREA DE COBERTURA]. O prazo poderá ser revisto quando houver necessidade de peças, acesso, terceiros ou condição técnica fora do controle da contratada, mediante comunicação ao cliente.\n\n4. OBRIGAÇÕES DA CONTRATADA\n\nExecutar os serviços pactuados com profissionais capacitados e observar as normas aplicáveis à atividade; informar ao cliente os defeitos encontrados; registrar visitas e recomendações; e apresentar orçamento prévio para materiais ou serviços não incluídos. A contratada não assume obrigação de vigilância patrimonial, pronto atendimento policial ou garantia de ausência de falhas e incidentes.\n\n5. OBRIGAÇÕES DA CONTRATANTE\n\nPermitir acesso seguro aos equipamentos e disponibilizar responsável autorizado, energia elétrica, conectividade e infraestrutura necessárias; fornecer informações sobre alterações no sistema; comunicar falhas prontamente; efetuar os pagamentos; e manter a guarda de credenciais e imagens conforme sua política de acesso e a legislação aplicável.\n\n6. EXCLUSÕES E SERVIÇOS ADICIONAIS\n\nPeças, reposição de equipamentos, licenças, obras civis, infraestrutura não prevista, deslocamentos extraordinários, modificações por terceiros e atendimentos fora do escopo somente estarão incluídos quando descritos expressamente. Os serviços adicionais serão executados mediante orçamento e aceite escrito da contratante.\n\n7. PREÇO, FATURAMENTO E PAGAMENTO\n\nA contratante pagará à contratada o valor de ${monthly} por mês, com vencimento no dia [DIA DE VENCIMENTO], por [FORMA DE PAGAMENTO], mediante emissão de documento fiscal aplicável. Condições especiais, tributos e encargos por atraso: [DEFINIR E CONFERIR ANTES DA ASSINATURA]. O valor de instalação ou fornecimento de equipamentos da proposta não se confunde com a mensalidade.\n\n8. REAJUSTE ANUAL\n\nApós cada período de 12 (doze) meses, o valor poderá ser reajustado pela variação acumulada do ${indexName}, considerando os 12 meses encerrados no mês anterior ao aniversário contratual, conforme disponibilidade da série oficial. Em caso de índice negativo, indisponibilidade ou extinção, as partes definirão o tratamento e eventual índice substituto por escrito: [COMPLEMENTAR REGRA CONTRATUAL]. A alteração do índice pactuado depende de acordo entre as partes. A contratada comunicará previamente o valor calculado e a data de vigência do reajuste.\n\n9. VIGÊNCIA, RENOVAÇÃO E RESCISÃO\n\nO contrato tem início previsto em ${fmtDate(startDate)} e vigência de [PRAZO A DEFINIR]. Condições de renovação, aviso prévio, rescisão e eventuais penalidades devem ser negociadas e preenchidas: [CONDIÇÕES A DEFINIR]. Valores de serviços realizados e despesas previamente aprovadas serão apurados até a data efetiva de encerramento.\n\n10. RESPONSABILIDADE E GARANTIA\n\nCada parte responderá pelos danos que comprovadamente causar, observados os limites legais e as condições aqui negociadas. A cobertura e a garantia dos serviços, bem como as condições dos equipamentos de terceiros, serão definidas expressamente: [DETALHAR GARANTIA]. A existência deste contrato não substitui seguro, vigilância humana ou obrigações de terceiros.\n\n11. DADOS PESSOAIS E CONFIDENCIALIDADE\n\nAs partes comprometem-se a proteger informações técnicas, credenciais e dados pessoais a que tiverem acesso, observando a Lei nº 13.709/2018 (LGPD), conforme os papéis e instruções efetivamente aplicáveis. Acesso a imagens e dados deve limitar-se ao necessário para executar o objeto. Procedimentos para incidentes, retenção e compartilhamento: [PREENCHER]. A obrigação de confidencialidade permanece pelo prazo que as partes acordarem ou enquanto a lei exigir.\n\n12. ALTERAÇÕES E DISPOSIÇÕES GERAIS\n\nAlterações de escopo, preço ou condições deverão ser formalizadas por escrito. A eventual tolerância de uma parte não implica renúncia de direitos. Situações de força maior ou impedimentos técnicos serão comunicados e tratados conforme a legislação e o ajuste entre as partes.\n\n13. FORO\n\nAs partes elegem o foro de [COMARCA A DEFINIR], observadas as regras legais aplicáveis, especialmente eventual competência obrigatória e direitos do consumidor.\n\nE, por estarem de acordo, assinam o presente instrumento.\n\n[LOCAL], ____ de __________________ de ______.\n\n________________________________________\n${settings.legalName} — CONTRATADA\n${settings.director}\n\n________________________________________\n${clientName} — CONTRATANTE\n[REPRESENTANTE LEGAL]\n\n________________________________________\nTestemunha 1 — Nome e CPF\n\n________________________________________\nTestemunha 2 — Nome e CPF`;
+  return `${maintenance ? "CONTRATO DE MANUTENÇÃO MENSAL PREVENTIVA E/OU CORRETIVA" : "CONTRATO DE FORNECIMENTO E/OU PRESTAÇÃO DE SERVIÇOS"}
+
+PARTES CONTRATANTES
+
+CONTRATADA: ${settings.legalName}, nome fantasia ${settings.companyName}, CNPJ ${settings.cnpj}, endereço ${settings.address}, representada por ${settings.director}, ${settings.role}. Contato: ${settings.email} · ${settings.phone}.
+
+CONTRATANTE: ${clientName}, CNPJ/CPF ${clientDocument}, endereço ${clientAddress}, representada por ${p.contact || client?.contactName || "[NOME E QUALIFICAÇÃO DO REPRESENTANTE]"}. Contato: ${p.clientEmail || client?.email || "[E-MAIL A PREENCHER]"}.
+
+As partes celebram este instrumento por opção de formalização da proposta ${p.number}, revisão ${String(p.revision).padStart(2, "0")}, emitida em ${fmtDate(p.issuedAt)}. A proposta e seus anexos integram este contrato. A geração desta minuta não equivale a assinatura, aceite ou ativação dos serviços. Em divergências, prevalece o ajuste escrito final firmado entre as partes.
+
+1. OBJETO E LOCAL
+
+${maintenance ? `Prestação de manutenção mensal sobre os sistemas existentes no local ${p.site || "[LOCAL A DEFINIR]"}, exclusivamente no escopo descrito a seguir.` : object}
+
+2. ESCOPO CONTRATADO
+
+${scopeText}
+
+Itens de referência da proposta:
+${itemText}
+
+${maintenance ? "Quantidades em meses indicam vigência estimada, não número de equipamentos. A mensalidade final está na cláusula de preço." : "Os itens listados serão conferidos no aceite técnico; substituições exigem autorização escrita."}
+
+3. PRAZOS, ATENDIMENTO E ACEITE
+
+${sla}
+
+As comunicações serão feitas pelos canais indicados na qualificação das partes. Mudanças de escopo ou indisponibilidade de acesso deverão ser registradas por escrito.
+
+4. OBRIGAÇÕES DA CONTRATADA
+
+Executar o objeto com equipe capacitada, observar as normas aplicáveis, registrar os serviços e comunicar as pendências encontradas. Solicitar aprovação prévia para serviços ou materiais adicionais. Não prometer ausência de falhas, furtos ou incidentes; a prestação técnica não substitui vigilância patrimonial, seguro ou obrigações de terceiros.
+
+5. OBRIGAÇÕES DA CONTRATANTE
+
+Disponibilizar acesso seguro, responsável autorizado, infraestrutura e informações necessárias; informar modificações no sistema; efetuar os pagamentos acordados; e manter a guarda de credenciais e dados. Restrições operacionais que afetem o atendimento ou cronograma deverão ser informadas em tempo hábil.
+
+6. PEÇAS, EXCLUSÕES E ADICIONAIS
+
+${maintenance && plan ? plan.partsCoverage : exclusions}
+
+Toda ampliação ou despesa fora do escopo depende de orçamento e aprovação por escrito antes da execução. Obrigações não confirmadas deverão ser descritas no anexo técnico, sem inclusão automática de serviços.
+
+7. PREÇO E PAGAMENTO
+
+${payment}
+
+8. VIGÊNCIA ${maintenance ? "E REAJUSTE ANUAL" : "E ALTERAÇÕES DE VALORES"}
+
+Início previsto: ${fmtDate(startDate)}. ${maintenance && plan ? `Vigência proposta: ${plan.termMonths} mês(es).` : "Vigência: [CONFIRMAR PRAZO]."} Condições de renovação e continuidade: [DEFINIR].
+
+${maintenance ? `O reajuste só poderá ocorrer após período mínimo de 12 meses, pela variação acumulada do ${indexName}, na janela de 12 meses encerrada no mês anterior ao aniversário contratual, conforme disponibilidade dos dados oficiais. Tratamento de índice negativo, indisponível ou extinto: [PACTUAR]. A substituição de índice depende de acordo escrito. O cliente será comunicado previamente do novo valor e data de vigência.` : "O preço, o cronograma e o escopo só serão alterados por acordo escrito. Não há reajuste recorrente automático. Eventual recomposição ou novo serviço dependerá de orçamento complementar e consentimento das partes."}
+
+9. GARANTIA E RESPONSABILIDADE
+
+${p.warranty || "[CONFERIR GARANTIA DOS SERVIÇOS E EQUIPAMENTOS]"}
+
+Cada parte responderá pelos danos que comprovadamente causar, observados a legislação aplicável e os direitos que não podem ser afastados por contrato. Garantias de equipamentos de terceiros e limites de cobertura serão especificados, sem excluir direitos legais obrigatórios.
+
+10. RESCISÃO E ENCERRAMENTO
+
+As partes definirão as hipóteses de rescisão, aviso prévio, prazo para sanar inadimplemento e eventuais penalidades proporcionais: [PREENCHER ANTES DA ASSINATURA]. Valores relativos a entregas e serviços realizados e despesas previamente aprovadas serão apurados até o encerramento. A devolução de acessos e documentação será registrada.
+
+11. CONFIDENCIALIDADE E DADOS PESSOAIS
+
+As partes protegerão informações técnicas, credenciais, imagens e dados pessoais, limitando o acesso ao necessário à execução do objeto, conforme a Lei nº 13.709/2018 (LGPD) e os papéis efetivamente desempenhados. Procedimentos de retenção, comunicação de incidentes e compartilhamento deverão ser acordados: [DEFINIR]. O dever de confidencialidade persiste pelo prazo pactuado ou legalmente exigível.
+
+12. DISPOSIÇÕES GERAIS E FORO
+
+A tolerância não implica renúncia de direitos. Alterações deverão ser documentadas e aceitas por ambas as partes. Elegem o foro de [COMARCA A DEFINIR], respeitadas as competências obrigatórias e as normas de proteção ao consumidor, quando aplicáveis.
+
+[LOCAL], ____ de __________________ de ______.
+
+________________________________________
+${settings.legalName} — CONTRATADA
+${settings.director}
+
+________________________________________
+${clientName} — CONTRATANTE
+[REPRESENTANTE LEGAL]
+
+________________________________________
+Testemunha 1 — Nome e CPF
+
+________________________________________
+Testemunha 2 — Nome e CPF`;
 }

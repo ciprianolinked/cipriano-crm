@@ -9,6 +9,7 @@ const NAV = [
   { href: "/", label: "Painel comercial", icon: "◧", hint: "Visão do dia" },
   { href: "/propostas/nova", label: "Nova proposta", icon: "＋", hint: "Briefing em 60s" },
   { href: "/propostas", label: "Propostas", icon: "▤", hint: "Documentos e PDF" },
+  { href: "/contratos", label: "Contratos", icon: "▱", hint: "Formalização opcional" },
   { href: "/crm", label: "CRM · Kanban", icon: "◫", hint: "Funil e follow-ups" },
   { href: "/clientes", label: "Clientes", icon: "◇", hint: "Base comercial" },
   { href: "/catalogo", label: "Catálogo", icon: "▦", hint: "Itens e preços" },

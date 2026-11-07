@@ -3,6 +3,7 @@ import { brl, fmtDate, fmtDateTime } from "@/lib/brand";
 import { dashboardStats, getSettings } from "@/lib/data";
 import { FollowUps, type FollowUpItem } from "@/components/crm/FollowUps";
 import { STAGES } from "@/lib/proposal/types";
+import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,12 @@ const PALETTE = [
 ];
 
 export default async function DashboardPage() {
-  const [stats, settings] = await Promise.all([dashboardStats(), getSettings()]);
+  const loaded = await loadDatabasePage(async () => {
+    const [stats, settings] = await Promise.all([dashboardStats(), getSettings()]);
+    return { stats, settings };
+  });
+  if (!loaded.ok) return loaded.recovery;
+  const { stats, settings } = loaded.data;
   const followItems: FollowUpItem[] = stats.followUps.map((f) => {
     const proposal = stats.rows.find((p) => p.id === f.proposalId);
     return {

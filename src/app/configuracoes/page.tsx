@@ -1,12 +1,17 @@
 import { ensureBootstrap, getSettings } from "@/lib/data";
 import { SettingsForm } from "@/components/settings/SettingsForm";
 import { ResetDataButton } from "@/components/settings/ResetDataButton";
+import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  await ensureBootstrap();
-  const settings = await getSettings();
+  const loaded = await loadDatabasePage(async () => {
+    await ensureBootstrap();
+    return getSettings();
+  });
+  if (!loaded.ok) return loaded.recovery;
+  const settings = loaded.data;
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-5 lg:px-7 lg:py-7">
       <header className="border-b border-line/50 pb-4">

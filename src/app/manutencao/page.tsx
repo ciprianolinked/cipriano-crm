@@ -3,12 +3,18 @@ import { ArrowRight, Sparkles } from "lucide-react";
 import { ensureBootstrap } from "@/lib/data";
 import { getMaintenanceData, listRecentReadjusts } from "@/lib/maintenance-db";
 import { MaintenanceManager } from "@/components/maintenance/MaintenanceManager";
+import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
 
 export default async function ManutencaoPage() {
-  await ensureBootstrap();
-  const [data, recentReadjusts] = await Promise.all([getMaintenanceData(), listRecentReadjusts(12)]);
+  const loaded = await loadDatabasePage(async () => {
+    await ensureBootstrap();
+    const [data, recentReadjusts] = await Promise.all([getMaintenanceData(), listRecentReadjusts(12)]);
+    return { data, recentReadjusts };
+  });
+  if (!loaded.ok) return loaded.recovery;
+  const { data, recentReadjusts } = loaded.data;
   return (
     <div className="mx-auto max-w-[1500px] px-4 py-6 lg:px-8 lg:py-8">
       <div className="mb-5 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.18em] text-steel"><Link href="/crm" className="hover:text-signal">CRM</Link><span className="text-line">/</span><span className="text-signal">Manutenção mensal</span></div>

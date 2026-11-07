@@ -31,6 +31,9 @@ export function SiteFooter() {
             <Link href="/configuracoes" className="hover:text-signal">
               Identidade
             </Link>
+            <Link href="/diagnostico" className="hover:text-signal">
+              Diagnóstico
+            </Link>
           </nav>
         </div>
 
@@ -47,7 +50,7 @@ export function SiteFooter() {
                 Guia de publicação do site completo
               </div>
               <div className="text-[11px] text-steel">
-                Passo a passo com GitHub, Vercel e Neon.tech — do repositório ao domínio próprio.
+                GitHub, Vercel e Neon.tech — agora com SQL completo do banco e solução para erros de publicação.
               </div>
             </div>
           </div>

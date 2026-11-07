@@ -4,6 +4,7 @@ import { LogoMark } from "@/components/ui/Logo";
 import { calcTotals } from "@/lib/proposal/catalog";
 import type { ProposalItem, ProposalSection, ProposalType } from "@/lib/proposal/types";
 import { typeLabels } from "@/lib/proposal/catalog";
+import { isMaintenanceProposal, maintenanceSummary } from "@/lib/proposal/maintenance-plan";
 
 export type DocSettings = {
   companyName: string;
@@ -37,6 +38,7 @@ export type DocData = {
   deliveryTime: string | null;
   warranty: string | null;
   artIncluded: boolean;
+  briefing?: Record<string, unknown> | null;
 };
 
 function BrandMark({ size = 38 }: { size?: number }) {
@@ -128,8 +130,10 @@ function ItemsTable({ items }: { items: ProposalItem[] }) {
 
 export function ProposalDocument({ proposal, settings }: { proposal: DocData; settings: DocSettings }) {
   const totals = calcTotals(proposal.items, proposal.discountPct);
+  const maintenance = isMaintenanceProposal(proposal.briefing);
+  const monthly = maintenanceSummary(proposal.items, proposal.discountPct, proposal.briefing);
   const enabled = proposal.sections.filter((s) => s.enabled);
-  const totalLabel = typeLabels[(proposal.type as ProposalType) ?? "completa"] ?? "Proposta comercial";
+  const totalLabel = maintenance ? "Proposta de manutenção mensal" : typeLabels[(proposal.type as ProposalType) ?? "completa"] ?? "Proposta comercial";
 
   return (
     <article className="cip-doc" id="proposal-document">
@@ -171,7 +175,7 @@ export function ProposalDocument({ proposal, settings }: { proposal: DocData; se
           <div className="cip-strip-value">{proposal.contact || "—"}</div>
         </div>
         <div>
-          <div className="cip-strip-label">Local de instalação</div>
+          <div className="cip-strip-label">{maintenance ? "Local de atendimento" : "Local de instalação"}</div>
           <div className="cip-strip-value">{proposal.site || "A confirmar"}</div>
         </div>
       </section>
@@ -238,10 +242,10 @@ export function ProposalDocument({ proposal, settings }: { proposal: DocData; se
               <>
                 <div className="cip-totals">
                   <div>
-                    <div className="cip-t-label">Investimento total</div>
-                    <div className="cip-t-big">{brl(totals.totalCents / 100)}</div>
+                    <div className="cip-t-label">{maintenance ? "Mensalidade da manutenção" : "Investimento total"}</div>
+                    <div className="cip-t-big">{brl((maintenance ? monthly.monthlyCents : totals.totalCents) / 100)}{maintenance ? " / mês" : ""}</div>
                     <div className="cip-t-sub">
-                      {proposal.items.length} itens · desconto comercial de {proposal.discountPct}% aplicado
+                      {maintenance ? `${monthly.months} meses de vigência · ${proposal.discountPct}% de desconto` : `${proposal.items.length} itens · desconto comercial de ${proposal.discountPct}% aplicado`}
                     </div>
                   </div>
                   <div>
@@ -255,8 +259,8 @@ export function ProposalDocument({ proposal, settings }: { proposal: DocData; se
                       <span>− {brl(totals.offCents / 100)}</span>
                     </div>
                     <div className="cip-mini">
-                      <span>12× de</span>
-                      <span>{brl(totals.installmentCents / 100)}</span>
+                      <span>{maintenance ? "Total do período" : "12× de"}</span>
+                      <span>{brl((maintenance ? totals.totalCents : totals.installmentCents) / 100)}</span>
                     </div>
                   </div>
                 </div>

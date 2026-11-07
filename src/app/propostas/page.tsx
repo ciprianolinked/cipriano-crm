@@ -2,6 +2,8 @@ import Link from "next/link";
 import { brl, fmtDate } from "@/lib/brand";
 import { ensureBootstrap, listProposals } from "@/lib/data";
 import { STAGES, PROPOSAL_TYPES } from "@/lib/proposal/types";
+import { isMaintenanceProposal } from "@/lib/proposal/maintenance-plan";
+import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
 
@@ -10,11 +12,15 @@ export default async function ProposalsPage({
 }: {
   searchParams: Promise<{ arquivadas?: string; tipo?: string }>;
 }) {
-  await ensureBootstrap();
+  const loaded = await loadDatabasePage(async () => {
+    await ensureBootstrap();
+    return listProposals(true);
+  });
+  if (!loaded.ok) return loaded.recovery;
   const params = await searchParams;
   const includeArchived = params.arquivadas === "1";
   const typeFilter = params.tipo ?? "todos";
-  const rows = (await listProposals(true))
+  const rows = loaded.data
     .filter((p) => (includeArchived || !p.archived) && (typeFilter === "todos" || p.type === typeFilter))
     .sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
   const total = rows.reduce((a, p) => a + p.totalCents, 0);
@@ -25,7 +31,7 @@ export default async function ProposalsPage({
         <div>
           <div className="label-mono text-signal">Documentos</div>
           <h1 className="mt-2 font-display text-[clamp(1.5rem,2.6vw,2rem)] font-semibold text-white">
-            Propostas comercial
+            Propostas comerciais
           </h1>
           <p className="mt-1 text-[12.5px] text-steel">
             {rows.length} documentos · {brl(total / 100)} em valor emitido. Edite, duplique e baixe em PDF A4.
@@ -91,6 +97,7 @@ export default async function ProposalsPage({
                         {p.clientName}
                       </Link>
                       <div className="text-[10px] text-steel">{p.contact}</div>
+                      {isMaintenanceProposal(p.briefing) ? <span className="chip mt-1 !border-signal/30 !text-signal !text-[8px]">Manutenção mensal</span> : null}
                     </td>
                     <td className="px-4 py-2.5 text-[11px] text-steel">{p.type.replace("_", " & ")}</td>
                     <td className="px-4 py-2.5">

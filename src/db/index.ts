@@ -1,46 +1,104 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { Pool, type PoolConfig } from "pg";
 
-function resolveDatabaseUrl() {
-  const raw =
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.POSTGRES_PRISMA_URL ||
-    process.env.DATABASE_URL_UNPOOLED ||
-    process.env.POSTGRES_URL_NON_POOLING;
+export class DatabaseConfigurationError extends Error {
+  readonly code = "DATABASE_NOT_CONFIGURED";
+  constructor() {
+    super("DATABASE_URL não configurada neste ambiente.");
+    this.name = "DatabaseConfigurationError";
+  }
+}
 
-  if (!raw) {
-    throw new Error(
-      "DATABASE_URL ausente. Na Vercel, cadastre DATABASE_URL com a string do Neon (a integração também pode criar POSTGRES_URL) e faça Redeploy.",
-    );
+type DatabaseCache = {
+  pool?: Pool;
+  db?: NodePgDatabase;
+  fingerprint?: string;
+};
+const globalForDb = globalThis as typeof globalThis & { __ciprianoDatabase?: DatabaseCache };
+const cache = (globalForDb.__ciprianoDatabase ??= {});
+
+/** Validate without ever including credentials in an error message. */
+export function getDatabaseConfigurationStatus(): "ready" | "missing" | "invalid" {
+  const value = process.env.DATABASE_URL?.trim();
+  if (!value) return "missing";
+  try {
+    const url = new URL(value);
+    return ["postgresql:", "postgres:"].includes(url.protocol) && url.hostname && url.pathname.length > 1
+      ? "ready"
+      : "invalid";
+  } catch {
+    return "invalid";
+  }
+}
+
+export function isNeonDatabase(): boolean {
+  try {
+    return new URL(process.env.DATABASE_URL ?? "").hostname.endsWith(".neon.tech");
+  } catch {
+    return false;
+  }
+}
+
+function createDatabase(): NodePgDatabase {
+  const raw = process.env.DATABASE_URL?.trim();
+  if (getDatabaseConfigurationStatus() !== "ready" || !raw) throw new DatabaseConfigurationError();
+  const url = new URL(raw);
+  const neon = url.hostname.endsWith(".neon.tech");
+  const explicitSsl = ["require", "verify-ca", "verify-full"].includes(url.searchParams.get("sslmode") ?? "");
+  const secureConnection = neon || explicitSsl || process.env.PGSSLMODE === "require";
+
+  // pg replaces explicit SSL options when these query parameters are present.
+  // Keep the original environment secret untouched; normalize only the driver URL.
+  for (const key of ["sslmode", "sslcert", "sslkey", "sslrootcert", "uselibpqcompat"]) {
+    url.searchParams.delete(key);
   }
 
-  // O parâmetro channel_binding quebra o driver pg e derruba todas as páginas na Vercel.
-  return raw
-    .replace(/([?&])channel_binding=[^&]*/g, "$1")
-    .replace(/\?&/g, "?")
-    .replace(/[?&]$/, "");
-}
+  const fingerprint = `${url.toString()}|${process.env.PGSSLROOTCERT ?? ""}`;
+  if (cache.db && cache.fingerprint === fingerprint) return cache.db;
 
-function createPool() {
-  const connectionString = resolveDatabaseUrl();
-  const local = /localhost|127\.0\.0\.1/.test(connectionString);
-  return new Pool({
-    connectionString,
-    max: process.env.VERCEL ? 1 : 10,
+  const config: PoolConfig = {
+    connectionString: url.toString(),
+    max: 3,
     connectionTimeoutMillis: 10_000,
-    idleTimeoutMillis: 20_000,
-    ssl: local ? undefined : { rejectUnauthorized: false },
+    idleTimeoutMillis: 15_000,
+    allowExitOnIdle: true,
+    application_name: "cipriano-tech-security",
+  };
+  if (secureConnection) {
+    config.ssl = {
+      rejectUnauthorized: true,
+      servername: url.hostname,
+      ...(process.env.PGSSLROOTCERT ? { ca: process.env.PGSSLROOTCERT } : {}),
+    };
+  }
+
+  // Never log connection strings or the underlying driver error (it may contain one).
+  const previous = cache.pool;
+  const pool = new Pool(config);
+  pool.on("error", () => {
+    // The next query reports a safe, actionable error; idle sockets may be recycled by Neon.
   });
+  cache.pool = pool;
+  cache.db = drizzle(pool);
+  cache.fingerprint = fingerprint;
+  if (previous) void previous.end().catch(() => undefined);
+  return cache.db;
 }
 
-const globalForDb = globalThis as typeof globalThis & {
-  __arenaNextJsPostgresqlPool?: Pool;
-  __arenaNextJsPostgresqlDb?: ReturnType<typeof drizzle>;
-};
+/** Lazy initialization lets the publishing guide load even before DATABASE_URL exists. */
+export const db = new Proxy({} as NodePgDatabase, {
+  get(_target, property) {
+    const database = createDatabase();
+    const value = Reflect.get(database, property, database);
+    return typeof value === "function" ? value.bind(database) : value;
+  },
+});
 
-export const pool = globalForDb.__arenaNextJsPostgresqlPool ?? createPool();
-export const db = globalForDb.__arenaNextJsPostgresqlDb ?? drizzle(pool);
-
-globalForDb.__arenaNextJsPostgresqlPool = pool;
-globalForDb.__arenaNextJsPostgresqlDb = db;
+// Backwards-compatible export. It is initialized on first use, not at module import.
+export const pool = new Proxy({} as Pool, {
+  get(_target, property) {
+    createDatabase();
+    const value = Reflect.get(cache.pool!, property, cache.pool);
+    return typeof value === "function" ? value.bind(cache.pool) : value;
+  },
+});
