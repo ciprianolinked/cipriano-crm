@@ -10,7 +10,9 @@ import { SECTION_LIBRARY } from "@/lib/proposal/generate";
 import { ProposalDocument, type DocData, type DocSettings } from "@/components/proposal/ProposalDocument";
 import { PrintActions } from "@/components/proposal/PrintActions";
 import { ProposalDeleteButton } from "@/components/proposal/ProposalDeleteButton";
+import { CompetitorUpload } from "@/components/proposal/CompetitorUpload";
 import { isMaintenanceProposal, maintenanceSummary } from "@/lib/proposal/maintenance-plan";
+import type { CompetitorAnalysis } from "@/lib/proposal/types";
 
 export type EditorActivity = {
   id: string;
@@ -74,7 +76,7 @@ export function ProposalEditor({
   const router = useRouter();
   const [proposal, setProposal] = useState<EditorProposal>(initial);
   const [activities, setActivities] = useState<EditorActivity[]>(initialActivities);
-  const [tab, setTab] = useState<"documento" | "itens" | "crm">("documento");
+  const [tab, setTab] = useState<"documento" | "itens" | "concorrente" | "crm">("documento");
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -388,6 +390,7 @@ export function ProposalEditor({
               [
                 ["documento", "Documento"],
                 ["itens", "Itens & valores"],
+                ["concorrente", "⚔️ Concorrente"],
                 ["crm", "CRM"],
               ] as const
             ).map(([id, label]) => (
@@ -698,6 +701,45 @@ export function ProposalEditor({
                   + Item personalizado
                 </button>
               </Panel>
+            </div>
+          ) : null}
+
+          {tab === "concorrente" ? (
+            <div className="space-y-3">
+              <CompetitorUpload
+                clientNameHint={proposal.clientName}
+                initialAnalysis={
+                  ((proposal.briefing as Record<string, unknown>)?.competitorAnalysis as CompetitorAnalysis) ?? null
+                }
+                onApplyAnalysis={(analysis) => {
+                  const currentTotalReais = totals.totalCents / 100;
+                  const currentSubtotalReais = totals.subtotalCents / 100;
+
+                  // Se o concorrente tiver valor total detectado e a Cipriano estiver mais cara,
+                  // calcula o desconto ideal para bater o concorrente
+                  let newDiscount = proposal.discountPct;
+                  if (
+                    analysis.detectedTotal > 0 &&
+                    currentSubtotalReais > 0 &&
+                    currentTotalReais >= analysis.detectedTotal
+                  ) {
+                    // Queremos ficar cerca de 3% a 5% abaixo do concorrente
+                    const targetPrice = analysis.detectedTotal * 0.95;
+                    const neededDiscount = Math.round(((currentSubtotalReais - targetPrice) / currentSubtotalReais) * 100);
+                    newDiscount = Math.max(0, Math.min(25, neededDiscount));
+                  } else if (analysis.recommendedDiscountPct) {
+                    newDiscount = Math.max(proposal.discountPct, analysis.recommendedDiscountPct);
+                  }
+
+                  update({
+                    discountPct: newDiscount,
+                    briefing: {
+                      ...(proposal.briefing as Record<string, unknown> | undefined),
+                      competitorAnalysis: analysis,
+                    },
+                  });
+                }}
+              />
             </div>
           ) : null}
 
