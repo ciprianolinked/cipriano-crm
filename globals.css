@@ -131,6 +131,8 @@
 @media print {
   body {
     background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   .no-print {
     display: none !important;
@@ -152,9 +154,36 @@
   }
   .cip-doc {
     page-break-after: auto;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    width: 210mm !important;
+    min-height: 0 !important;
+  }
+  .cip-sec,
+  .cip-table tr,
+  .cip-totals,
+  .cip-terms,
+  .cip-sign,
+  .cip-strip {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .cip-table thead {
+    display: table-header-group;
+  }
+  /* Rodapé profissional repetido em todas as folhas impressas. */
+  .cip-foot {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 210mm !important;
+    margin: 0 !important;
+    background: #fff !important;
   }
   @page {
     size: A4;
-    margin: 0;
+    margin: 10mm 0 17mm 0;
   }
 }

@@ -1,20 +1,28 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { ensureBootstrap, listProposals } from "@/lib/data";
+import { notFound } from "next/navigation";
+import { desc, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { maintenanceContracts, maintenanceDocumentRevisions, maintenanceReadjusts } from "@/db/schema";
+import { getSettings } from "@/lib/data";
 import { getIndexObservations } from "@/lib/indices-db";
-import { compareIndexes } from "@/lib/indices";
-import { NewContractForm } from "@/components/maintenance/NewContractForm";
+import { deriveContract } from "@/lib/maintenance";
+import { ContractEditor } from "@/components/maintenance/ContractEditor";
 import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
-export default async function NewContractPage({ searchParams }: { searchParams: Promise<{ proposta?: string; modalidade?: string }> }) {
+export default async function ContractPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const loaded = await loadDatabasePage(async () => {
-    await ensureBootstrap();
-    const [proposals, observations] = await Promise.all([listProposals(true), getIndexObservations()]);
-    return { proposals, observations };
+    const [row] = await db.select().from(maintenanceContracts).where(eq(maintenanceContracts.id, id)).limit(1);
+    if (!row) notFound();
+    const [observations, settings, revisions, readjusts] = await Promise.all([
+      getIndexObservations(), getSettings(),
+      db.select().from(maintenanceDocumentRevisions).where(eq(maintenanceDocumentRevisions.contractId, id)).orderBy(desc(maintenanceDocumentRevisions.revision)),
+      db.select().from(maintenanceReadjusts).where(eq(maintenanceReadjusts.contractId, id)),
+    ]);
+    return { row, observations, settings, revisions, derived: deriveContract(row, readjusts, observations) };
   });
   if (!loaded.ok) return loaded.recovery;
-  const { proposals, observations } = loaded.data;
-  const params = await searchParams;
-  return <div className="mx-auto max-w-[1200px] px-4 py-6 lg:px-8 lg:py-8"><Link href="/contratos" className="inline-flex items-center gap-2 text-[11.5px] text-steel hover:text-signal"><ArrowLeft size={14}/> Voltar para contratos</Link><header className="mb-6 mt-5"><div className="label-mono text-signal">Formalização opcional</div><h1 className="mt-2 font-display text-[clamp(1.6rem,3vw,2.15rem)] font-semibold tracking-tight text-white">Gerar contrato da proposta</h1><p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-steel">Quando o cliente optar por contrato, transforme a proposta em uma minuta editável. Escolha fornecimento/serviços ou manutenção mensal.</p></header><NewContractForm proposals={proposals.map((p) => ({ id: p.id, number: p.number, revision: p.revision, clientName: p.clientName, items: p.items, site: p.site, totalCents: p.totalCents, discountPct: p.discountPct, briefing: p.briefing }))} initialProposalId={params.proposta ?? ""} defaultKind={params.modalidade === "manutencao" ? "manutencao" : undefined} comparison={compareIndexes(observations)} aiEnabled={Boolean(process.env.OPENAI_API_KEY)} today={new Date().toISOString().slice(0, 10)} /></div>;
+  const { row, observations, settings, revisions, derived } = loaded.data;
+  return <ContractEditor initial={{ ...derived, contractText: row.contractText }} observations={observations} revisions={revisions.map((r) => ({ id: r.id, revision: r.revision, body: r.body, note: r.note, createdAt: r.createdAt.toISOString() }))} aiEnabled={Boolean(process.env.OPENAI_API_KEY)} settings={{ companyName: settings.companyName, phone: settings.phone, email: settings.email, cnpj: settings.cnpj }} />;
 }

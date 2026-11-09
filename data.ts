@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, appSettings, catalogItems, clients, proposals } from "@/db/schema";
 import type { ActivityRow, CatalogRow, ClientRow, ProposalRow, SettingsRow } from "@/db/schema";
@@ -157,7 +157,7 @@ export async function listRevisions(proposalId: string) {
   return db
     .select()
     .from(proposals)
-    .where(eq(proposals.revisionGroupId, groupId))
+    .where(or(eq(proposals.id, groupId), eq(proposals.revisionGroupId, groupId)))
     .orderBy(proposals.revision);
 }
 

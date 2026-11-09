@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, proposals } from "@/db/schema";
+import { deleteProposalFamily } from "@/lib/proposal/delete";
 import { calcTotals } from "@/lib/proposal/catalog";
 import { isProposalType, isStage, type ProposalItem, type ProposalSection } from "@/lib/proposal/types";
 
@@ -119,7 +120,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  await db.delete(activities).where(eq(activities.proposalId, id));
-  await db.delete(proposals).where(eq(proposals.id, id));
-  return NextResponse.json({ ok: true });
+  const result = await deleteProposalFamily(id);
+  if (!result) return NextResponse.json({ error: "Proposta não encontrada." }, { status: 404 });
+  return NextResponse.json({ ok: true, ...result, preservedContracts: true });
 }

@@ -50,7 +50,7 @@ export function SiteFooter() {
                 Guia de publicação do site completo
               </div>
               <div className="text-[11px] text-steel">
-                GitHub, Vercel e Neon.tech — agora com SQL completo do banco e solução para erros de publicação.
+                Baixar projeto limpo para GitHub · Publicar na Vercel · SQL do Neon
               </div>
             </div>
           </div>

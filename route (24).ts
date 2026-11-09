@@ -1,41 +1,53 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { appSettings } from "@/db/schema";
-import { getSettings } from "@/lib/data";
+import {
+  activities,
+  appSettings,
+  clients,
+  maintenanceContracts,
+  maintenanceDocumentRevisions,
+  maintenanceReadjusts,
+  proposals,
+} from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return NextResponse.json({ settings: await getSettings() });
-}
+/**
+ * Zera os dados de operação (propostas, CRM, clientes, manutenção) para
+ * começar de fato. Identidade e catálogo são preservados por padrão.
+ */
+export async function POST(request: Request) {
+  const body = (await request.json().catch(() => ({}))) as { confirm?: string };
+  const confirm = String(body.confirm ?? "").trim().toUpperCase();
+  if (confirm !== "ZERAR") {
+    return NextResponse.json({ error: 'Digite "ZERAR" para confirmar.' }, { status: 400 });
+  }
 
-export async function PATCH(request: Request) {
-  const current = await getSettings();
-  const body = (await request.json()) as Record<string, unknown>;
-  const patch: Record<string, unknown> = { updatedAt: new Date() };
-  const textFields = [
-    "companyName",
-    "legalName",
-    "tagline",
-    "director",
-    "role",
-    "phone",
-    "landline",
-    "email",
-    "site",
-    "address",
-    "cnpj",
-    "crea",
-    "hours",
-    "defaultPaymentTerms",
-    "defaultDeliveryTime",
-    "defaultWarranty",
-  ];
-  for (const field of textFields) if (field in body) patch[field] = String(body[field] ?? "");
-  if ("defaultValidityDays" in body)
-    patch.defaultValidityDays = Math.max(1, Math.round(Number(body.defaultValidityDays ?? 15)));
+  await db.delete(maintenanceDocumentRevisions);
+  const readjusts = await db.delete(maintenanceReadjusts).returning({ id: maintenanceReadjusts.id });
+  const contracts = await db.delete(maintenanceContracts).returning({ id: maintenanceContracts.id });
+  const acts = await db.delete(activities).returning({ id: activities.id });
+  const props = await db.delete(proposals).returning({ id: proposals.id });
+  const cli = await db.delete(clients).returning({ id: clients.id });
 
-  const [row] = await db.update(appSettings).set(patch).where(eq(appSettings.id, current.id)).returning();
-  return NextResponse.json({ settings: row });
+  const [settings] = await db.select().from(appSettings).limit(1);
+  if (settings) {
+    await db
+      .update(appSettings)
+      .set({ proposalCounter: 0, updatedAt: new Date() })
+      .where(eq(appSettings.id, settings.id));
+  }
+
+  return NextResponse.json({
+    ok: true,
+    removed: {
+      readjusts: readjusts.length,
+      contracts: contracts.length,
+      activities: acts.length,
+      proposals: props.length,
+      clients: cli.length,
+      catalogItems: 0,
+    },
+  });
 }

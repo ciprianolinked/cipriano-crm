@@ -1,42 +1,105 @@
-import { ensureBootstrap, listClients } from "@/lib/data";
-import { NewProposalWizard } from "@/components/proposal/NewProposalWizard";
+import { notFound } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { maintenanceContracts } from "@/db/schema";
+import {
+  ensureBootstrap,
+  getSettings,
+  listActivities,
+  listCatalog,
+  listRevisions,
+  proposalWithClient,
+} from "@/lib/data";
+import { ProposalEditor, type EditorActivity } from "@/components/proposal/ProposalEditor";
+import { isProposalType, type ProposalType } from "@/lib/proposal/types";
 import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewProposalPage() {
+export default async function ProposalEditorPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const loaded = await loadDatabasePage(async () => {
     await ensureBootstrap();
-    return listClients();
+    const result = await proposalWithClient(id);
+    if (!result) notFound();
+    const [settings, catalog, activityRows, revisions, contracts] = await Promise.all([
+      getSettings(), listCatalog(), listActivities(id), listRevisions(id),
+      db.select({ id: maintenanceContracts.id, title: maintenanceContracts.title, kind: maintenanceContracts.contractKind, status: maintenanceContracts.status, revision: maintenanceContracts.documentRevision }).from(maintenanceContracts).where(eq(maintenanceContracts.proposalId, id)),
+    ]);
+    const activities: EditorActivity[] = activityRows.map((a) => ({
+      id: a.id, kind: a.kind, content: a.content,
+      dueAt: a.dueAt ? a.dueAt.toISOString() : null,
+      doneAt: a.doneAt ? a.doneAt.toISOString() : null,
+      createdAt: a.createdAt.toISOString(),
+    }));
+    return { proposal: result.proposal, settings, catalog, activities, revisions, contracts };
   });
   if (!loaded.ok) return loaded.recovery;
-  const clients = loaded.data;
+  const { proposal, settings, catalog, activities, revisions, contracts } = loaded.data;
+
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-5 lg:px-7 lg:py-7">
-      <header className="border-b border-line/50 pb-4">
-        <div className="label-mono text-signal">Motor de propostas</div>
-        <h1 className="mt-2 font-display text-[clamp(1.5rem,2.6vw,2rem)] font-semibold text-white">
-          Nova proposta em três etapas
-        </h1>
-        <p className="mt-1 max-w-3xl text-[12.5px] leading-relaxed text-steel">
-          Elabore uma proposta de projeto, produtos ou serviços, ou um plano de manutenção mensal preventiva e corretiva.
-          Revise os valores e, se o cliente optar, prepare também um contrato vinculado.
-        </p>
-      </header>
-      <div className="mt-4">
-        <NewProposalWizard
-          aiEnabled={Boolean(process.env.OPENAI_API_KEY)}
-          clients={clients.map((c) => ({
-            id: c.id,
-            name: c.name,
-            contactName: c.contactName,
-            email: c.email,
-            address: c.address,
-            city: c.city,
-            state: c.state,
-          }))}
-        />
-      </div>
-    </div>
+    <ProposalEditor
+      initial={{
+        id: proposal.id,
+        number: proposal.number,
+        type: isProposalType(proposal.type) ? (proposal.type as ProposalType) : "completa",
+        status: proposal.status,
+        archived: proposal.archived,
+        revision: proposal.revision,
+        revisionGroupId: proposal.revisionGroupId,
+        clientName: proposal.clientName,
+        contact: proposal.contact,
+        clientEmail: proposal.clientEmail,
+        site: proposal.site,
+        issuedAt: proposal.issuedAt.toISOString(),
+        validityDays: proposal.validityDays,
+        discountPct: proposal.discountPct,
+        items: proposal.items,
+        sections: proposal.sections,
+        paymentTerms: proposal.paymentTerms,
+        deliveryTime: proposal.deliveryTime,
+        warranty: proposal.warranty,
+        artIncluded: proposal.artIncluded,
+        nextActionAt: proposal.nextActionAt ? proposal.nextActionAt.toISOString() : null,
+        nextActionNote: proposal.nextActionNote,
+        lossReason: proposal.lossReason,
+        briefing: proposal.briefing,
+      }}
+      settings={{
+        companyName: settings.companyName,
+        legalName: settings.legalName,
+        tagline: settings.tagline,
+        director: settings.director,
+        role: settings.role,
+        phone: settings.phone,
+        landline: settings.landline,
+        email: settings.email,
+        site: settings.site,
+        address: settings.address,
+        cnpj: settings.cnpj,
+        crea: settings.crea,
+        hours: settings.hours,
+      }}
+      catalog={catalog.map((c) => ({
+        id: c.id,
+        kind: c.kind,
+        category: c.category,
+        description: c.description,
+        spec: c.spec,
+        unit: c.unit,
+        priceCents: c.priceCents,
+      }))}
+      activities={activities}
+      contracts={contracts}
+      revisions={revisions.map((r) => ({
+        id: r.id,
+        number: r.number,
+        revision: r.revision,
+        status: r.status,
+        totalCents: r.totalCents,
+        createdAt: r.createdAt.toISOString(),
+        issuedAt: r.issuedAt.toISOString(),
+      }))}
+    />
   );
 }

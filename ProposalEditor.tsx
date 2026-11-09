@@ -9,6 +9,7 @@ import { STAGES, type ProposalItem, type ProposalSection } from "@/lib/proposal/
 import { SECTION_LIBRARY } from "@/lib/proposal/generate";
 import { ProposalDocument, type DocData, type DocSettings } from "@/components/proposal/ProposalDocument";
 import { PrintActions } from "@/components/proposal/PrintActions";
+import { ProposalDeleteButton } from "@/components/proposal/ProposalDeleteButton";
 import { isMaintenanceProposal, maintenanceSummary } from "@/lib/proposal/maintenance-plan";
 
 export type EditorActivity = {
@@ -167,8 +168,10 @@ export function ProposalEditor({
       setDirty(false);
       setSavedAt(new Date().toLocaleTimeString("pt-BR"));
       router.refresh();
+      return true;
     } catch {
       setSavedAt("erro ao salvar");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -249,26 +252,24 @@ export function ProposalEditor({
 
   async function createRevision() {
     setRevisionBusy(true);
-    const res = await fetch(`/api/proposals/${proposal.id}/duplicate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ revision: true }),
-    });
-    const data = (await res.json()) as { proposal?: { id: string }; isRevision?: boolean };
-    if (data.proposal) {
-      const rev: EditorRevision = {
-        id: data.proposal.id,
-        number: proposal.number,
-        revision: (proposal.revision ?? 1) + 1,
-        status: "novo",
-        totalCents: totals.totalCents,
-        createdAt: new Date().toISOString(),
-        issuedAt: new Date().toISOString(),
-      };
-      setRevisions((prev) => [rev, ...prev]);
-      setRevisionBusy(false);
+    try {
+      if (dirty) {
+        setSavedAt("Salvando a versão atual…");
+        const saved = await save();
+        if (!saved) throw new Error("Não foi possível salvar as alterações. A nova revisão não foi criada.");
+      }
+      const res = await fetch(`/api/proposals/${proposal.id}/duplicate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ revision: true }),
+      });
+      const data = (await res.json()) as { proposal?: { id: string }; error?: string };
+      if (!res.ok || !data.proposal) throw new Error(data.error || "Não foi possível criar uma revisão.");
       router.push(`/propostas/${data.proposal.id}`);
-    } else {
+      router.refresh();
+    } catch (err) {
+      setSavedAt(err instanceof Error ? err.message : "Falha ao criar revisão");
+    } finally {
       setRevisionBusy(false);
     }
   }
@@ -318,23 +319,25 @@ export function ProposalEditor({
             >
               Gerar contrato (opcional)
             </Link>
-            <button className="btn" onClick={duplicate} disabled={saving}>
+            <button className="btn" onClick={duplicate} disabled={saving || revisionBusy}>
               Duplicar
             </button>
             <button
-              className="btn"
+              className="btn btn-primary"
               onClick={createRevision}
               disabled={saving || revisionBusy}
+              title="Salva as alterações e cria a próxima revisão"
             >
-              {revisionBusy ? "Revisando…" : "Nova revisão"}
+              {revisionBusy ? "Preparando revisão…" : "Reformular em nova revisão"}
             </button>
+            <ProposalDeleteButton id={proposal.id} number={proposal.number} revisionCount={Math.max(revisions.length, 1)} />
             <button className="btn" onClick={toggleArchive} disabled={saving}>
               {proposal.archived ? "Restaurar" : "Arquivar"}
             </button>
             <button className="btn btn-primary" onClick={() => save()} disabled={saving}>
               {saving ? "Salvando…" : "Salvar"}
             </button>
-            <PrintActions filename={`${proposal.number}-${proposal.clientName.replace(/\s+/g, "-")}`} />
+            <PrintActions filename={`${proposal.number}-${proposal.clientName.replace(/\s+/g, "-")}`} doc={proposal} settings={settings} />
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 border-t border-line/40 px-4 py-2 lg:px-6">
@@ -812,7 +815,11 @@ export function ProposalEditor({
           Edite qualquer bloco · personalize condições · baixe em PDF A4 com o papel timbrado Cipriano.
         </span>
         <div className="flex gap-2">
-          <PrintActions filename={`${proposal.number}-${proposal.clientName.replace(/\s+/g, "-")}`} compact />
+          <PrintActions
+            filename={`${proposal.number}-${proposal.clientName.replace(/\s+/g, "-")}`}
+            doc={proposal}
+            settings={settings}
+          />
           <button className="btn btn-primary" onClick={() => save()} disabled={saving}>
             {saving ? "Salvando…" : "Salvar alterações"}
           </button>
