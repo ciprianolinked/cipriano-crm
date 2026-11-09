@@ -8,10 +8,11 @@ import { brl, fmtDate } from "@/lib/brand";
 import { formatPct, type DerivedContract } from "@/lib/maintenance";
 import { calculateIndex, contractualWindow, formatIndexPct, INDEXES, isOfficialIndex, parseManualPct, type IndexObservation } from "@/lib/indices";
 import { IndexComparisonPanel } from "@/components/maintenance/IndexComparison";
+import type { PdfSettings } from "@/lib/pdf-documents";
 
 export type ContractRevision = { id: string; revision: number; body: string; note: string; createdAt: string };
 type Contract = DerivedContract & { contractText: string };
-type Settings = { companyName: string; phone: string; email: string; cnpj: string };
+type Settings = PdfSettings;
 
 export function ContractEditor({ initial, observations, revisions, aiEnabled, settings }: { initial: Contract; observations: IndexObservation[]; revisions: ContractRevision[]; aiEnabled: boolean; settings: Settings }) {
   const router = useRouter();
@@ -102,11 +103,7 @@ export function ContractEditor({ initial, observations, revisions, aiEnabled, se
         clientName: contract.clientName,
         revision: contract.documentRevision,
         maintenance,
-        settings: {
-          companyName: settings.companyName, legalName: settings.companyName, tagline: "",
-          director: "", role: "", phone: settings.phone, landline: "", email: settings.email,
-          site: "ciprianotech.com.br", address: "", cnpj: settings.cnpj, crea: "", hours: "",
-        },
+        settings,
         logo,
       });
       pdf.save(`contrato-${(contract.proposalNumber || contract.clientName).replace(/[^a-z0-9-]/gi, "-")}-rev${String(contract.documentRevision).padStart(2, "0")}.pdf`);
