@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 
 /**
  * Emblema oficial Cipriano: hexágono duplo, lente/íris e nós ciano.
@@ -16,10 +16,6 @@ export function LogoMark({
   style?: CSSProperties;
 }) {
   const width = (height * 210) / 240;
-  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
-  const lensId = `cipLens-${uid}`;
-  const glassId = `cipGlass-${uid}`;
-  const clipId = `cipLensClip-${uid}`;
   return (
     <svg
       width={width}
@@ -33,16 +29,16 @@ export function LogoMark({
       aria-label="Emblema Cipriano Tech & Security"
     >
       <defs>
-        <radialGradient id={lensId} cx="38%" cy="32%" r="72%">
+        <radialGradient id="cipLens" cx="38%" cy="32%" r="72%">
           <stop offset="0%" stopColor="#1B7C8C" />
           <stop offset="55%" stopColor="#0F4E5C" />
           <stop offset="100%" stopColor="#07222C" />
         </radialGradient>
-        <linearGradient id={glassId} x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id="cipGlass" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#00E5FF" stopOpacity="0.35" />
           <stop offset="100%" stopColor="#00E5FF" stopOpacity="0" />
         </linearGradient>
-        <clipPath id={clipId}>
+        <clipPath id="cipLensClip">
           <circle cx="105" cy="118" r="51" />
         </clipPath>
       </defs>
@@ -81,11 +77,11 @@ export function LogoMark({
       <line x1="152" y1="118" x2="165" y2="118" stroke="#00E5FF" strokeOpacity="0.3" strokeWidth="1" strokeDasharray="3 5" />
 
       {/* Corpo da lente */}
-      <circle cx="105" cy="118" r="51" fill={`url(#${lensId})`} stroke="#F2F7FC" strokeWidth="3.5" />
+      <circle cx="105" cy="118" r="51" fill="url(#cipLens)" stroke="#F2F7FC" strokeWidth="3.5" />
       <circle cx="105" cy="118" r="45" fill="none" stroke="#00E5FF" strokeOpacity="0.45" strokeWidth="1" />
 
       {/* Íris / diafragma */}
-      <g clipPath={`url(#${clipId})`}>
+      <g clipPath="url(#cipLensClip)">
         <polygon points="105,73 156,118 105,118" fill="#0E5A68" opacity="0.85" />
         <polygon points="156,118 105,163 105,118" fill="#0A4753" opacity="0.9" />
         <polygon points="105,163 54,118 105,118" fill="#0C5260" opacity="0.75" />

@@ -3,19 +3,15 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowUpRight, CalendarClock, CheckCircle2, ChevronDown, FileText, History, Save, Scale, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, CalendarClock, CheckCircle2, ChevronDown, Download, FileText, History, Save, Scale, Sparkles } from "lucide-react";
 import { brl, fmtDate } from "@/lib/brand";
 import { formatPct, type DerivedContract } from "@/lib/maintenance";
 import { calculateIndex, contractualWindow, formatIndexPct, INDEXES, isOfficialIndex, parseManualPct, type IndexObservation } from "@/lib/indices";
 import { IndexComparisonPanel } from "@/components/maintenance/IndexComparison";
-import { A4Document } from "@/components/documents/A4Document";
-import { CiprianoDocumentHeader, type DocumentFooterData } from "@/components/documents/DocumentChrome";
-import { PrintActions } from "@/components/proposal/PrintActions";
-import type { DocSettings } from "@/components/proposal/ProposalDocument";
 
 export type ContractRevision = { id: string; revision: number; body: string; note: string; createdAt: string };
 type Contract = DerivedContract & { contractText: string };
-type Settings = DocSettings;
+type Settings = { companyName: string; phone: string; email: string; cnpj: string };
 
 export function ContractEditor({ initial, observations, revisions, aiEnabled, settings }: { initial: Contract; observations: IndexObservation[]; revisions: ContractRevision[]; aiEnabled: boolean; settings: Settings }) {
   const router = useRouter();
@@ -39,7 +35,6 @@ export function ContractEditor({ initial, observations, revisions, aiEnabled, se
   const [agreed, setAgreed] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [versionNote, setVersionNote] = useState("");
-  const [documentView, setDocumentView] = useState<"edit" | "preview">("edit");
 
   useEffect(() => {
     // Atualiza cálculos e alertas recebidos após salvar, sem sobrescrever o texto em edição.
@@ -94,6 +89,34 @@ export function ContractEditor({ initial, observations, revisions, aiEnabled, se
     finally { setBusy(""); }
   }
 
+  async function downloadPdf() {
+    setBusy("pdf"); setError("");
+    try {
+      const [{ jsPDF }, pdfKit] = await Promise.all([import("jspdf"), import("@/lib/pdf-documents")]);
+      const logo = await pdfKit.loadBrandLogo();
+      const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+      pdfKit.renderContractPdf(pdf, {
+        text,
+        title: maintenance ? "Contrato de manutencao mensal" : "Contrato de fornecimento e/ou servicos",
+        reference: contract.proposalNumber || contract.title,
+        clientName: contract.clientName,
+        revision: contract.documentRevision,
+        maintenance,
+        settings: {
+          companyName: settings.companyName, legalName: settings.companyName, tagline: "",
+          director: "", role: "", phone: settings.phone, landline: "", email: settings.email,
+          site: "ciprianotech.com.br", address: "", cnpj: settings.cnpj, crea: "", hours: "",
+        },
+        logo,
+      });
+      pdf.save(`contrato-${(contract.proposalNumber || contract.clientName).replace(/[^a-z0-9-]/gi, "-")}-rev${String(contract.documentRevision).padStart(2, "0")}.pdf`);
+    } catch {
+      setError("Não foi possível gerar o PDF. Tente novamente.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   const manual = parseManualPct(manualPct);
   const autoValue = isOfficialIndex(readjustIndex)
     ? calculateIndex(readjustIndex, contractualWindow(contract.nextReadjustAt).months, observations).accumulatedPct
@@ -101,26 +124,12 @@ export function ContractEditor({ initial, observations, revisions, aiEnabled, se
   const chosenPct = manualPct.trim() ? manual : autoValue;
   const projected = chosenPct !== null ? Math.round(contract.monthlyCents * (1 + chosenPct / 100)) : null;
 
-  const contractFooter: DocumentFooterData = {
-    companyName: settings.companyName, legalName: settings.legalName, address: settings.address,
-    cnpj: settings.cnpj, crea: settings.crea, phone: settings.phone, email: settings.email, site: settings.site,
-    documentLabel: maintenance ? "Contrato de manutenção" : "Contrato da proposta",
-    documentNumber: contract.proposalNumber || contract.id.slice(0, 8),
-    revision: `Minuta R${String(contract.documentRevision).padStart(2, "0")}`,
-    notice: "Minuta para conferência e assinatura · Revise juridicamente antes de firmar.",
-  };
-
   return <div className="mx-auto max-w-[1500px] px-4 py-6 lg:px-7 lg:py-7">
-    <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-3"><div><Link href="/contratos" className="inline-flex items-center gap-1.5 text-[11px] text-steel hover:text-signal"><ArrowLeft size={13}/> Voltar à carteira</Link><div className="mt-3 flex flex-wrap items-center gap-2"><span className="label-mono !text-signal">{maintenance ? "Contrato de manutenção" : "Contrato da proposta"}</span><span className="chip !border-signal/30 !text-signal">Rev. {String(contract.documentRevision).padStart(2, "0")}</span><span className="chip">{contract.status}</span></div><h1 className="mt-2 font-display text-[clamp(1.5rem,2.5vw,2rem)] font-semibold tracking-tight text-white">{contract.clientName}</h1><div className="mt-1 text-[11.5px] text-steel">{contract.proposalId && contract.proposalNumber ? <>Proposta de origem: <Link href={`/propostas/${contract.proposalId}`} className="text-signal hover:underline">{contract.proposalNumber} · Rev. {String(contract.proposalRevision ?? 1).padStart(2, "0")} <ArrowUpRight size={11} className="inline"/></Link></> : "Contrato sem proposta vinculada"}</div></div><div className="flex flex-wrap items-center gap-2"><span className={`mr-1 text-[10.5px] ${dirty ? "text-amber" : "text-steel"}`}>{dirty ? "Alterações não salvas" : "Tudo salvo"}</span><PrintActions compact targetId="contract-document" title={title || "Contrato"} filename={`contrato-${(contract.proposalNumber || contract.clientName).replace(/[^a-z0-9-]/gi, "-")}-rev${String(contract.documentRevision).padStart(2, "0")}`} /><button className="btn btn-primary" disabled={busy !== ""} onClick={save}><Save size={14}/>{busy === "save" ? "Salvando..." : "Salvar alterações"}</button></div></div>
+    <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-3"><div><Link href="/contratos" className="inline-flex items-center gap-1.5 text-[11px] text-steel hover:text-signal"><ArrowLeft size={13}/> Voltar à carteira</Link><div className="mt-3 flex flex-wrap items-center gap-2"><span className="label-mono !text-signal">{maintenance ? "Contrato de manutenção" : "Contrato da proposta"}</span><span className="chip !border-signal/30 !text-signal">Rev. {String(contract.documentRevision).padStart(2, "0")}</span><span className="chip">{contract.status}</span></div><h1 className="mt-2 font-display text-[clamp(1.5rem,2.5vw,2rem)] font-semibold tracking-tight text-white">{contract.clientName}</h1><div className="mt-1 text-[11.5px] text-steel">{contract.proposalNumber ? <>Proposta de origem: <Link href={`/propostas/${contract.proposalId}`} className="text-signal hover:underline">{contract.proposalNumber} · Rev. {String(contract.proposalRevision ?? 1).padStart(2, "0")} <ArrowUpRight size={11} className="inline"/></Link></> : "Contrato sem proposta vinculada"}</div></div><div className="flex flex-wrap items-center gap-2"><span className={`mr-1 text-[10.5px] ${dirty ? "text-amber" : "text-steel"}`}>{dirty ? "Alterações não salvas" : "Tudo salvo"}</span><button className="btn" disabled={busy !== "" || !text.trim()} onClick={downloadPdf}><Download size={14}/>{busy === "pdf" ? "Gerando..." : "Baixar PDF"}</button><button className="btn btn-primary" disabled={busy !== ""} onClick={save}><Save size={14}/>{busy === "save" ? "Salvando..." : "Salvar alterações"}</button></div></div>
     {error ? <div role="alert" className="mb-3 rounded-lg border border-alarm/40 bg-alarm/5 p-3 text-[11.5px] text-alarm">{error}</div> : null}{message ? <div role="status" className="mb-3 rounded-lg border border-armed/30 bg-armed/5 p-3 text-[11.5px] text-silver">{message}</div> : null}
     <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-4">
-        <section className="card overflow-hidden"><div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/50 px-5 py-4"><div><div className="label-mono text-signal">Documento editável</div><h2 className="mt-1 font-display text-[15px] font-semibold text-white">Minuta do contrato</h2></div><div className="flex items-center gap-1"><button type="button" className={`btn px-2.5 py-1 text-[11px] ${documentView === "edit" ? "!border-signal/50 !text-signal" : ""}`} onClick={() => setDocumentView("edit")}>Editar texto</button><button type="button" className={`btn px-2.5 py-1 text-[11px] ${documentView === "preview" ? "!border-signal/50 !text-signal" : ""}`} onClick={() => setDocumentView("preview")}>Prévia A4</button></div></div><div className="bg-[#091626] p-3 sm:p-5"><div className="mx-auto max-w-[820px] overflow-hidden rounded-sm bg-white shadow-xl"><div className="flex items-center justify-between border-b-[3px] border-[#00d4eb] bg-[#0a192f] px-6 py-4">{/* eslint-disable-next-line @next/next/no-img-element */}<img src="/logo-cipriano.svg" alt="Cipriano Tech & Security" style={{ width: 190, height: "auto" }} /><div className="text-right font-mono text-[8px] uppercase tracking-wider text-[#91a6bc]">Minuta contratual<br/>Revisão {String(contract.documentRevision).padStart(2, "0")}</div></div>{documentView === "edit" ? <textarea aria-label="Texto integral do contrato" spellCheck className="min-h-[1050px] w-full resize-y border-0 bg-white px-6 py-6 font-sans text-[12.5px] leading-[1.8] text-[#283a50] outline-none sm:px-10" value={text} onChange={(e) => { setText(e.target.value); setAiApplied(false); changed(); }} placeholder="Digite ou cole aqui o texto integral do contrato. Para gerar uma minuta com base em uma proposta, crie um novo contrato a partir dela."/> : null}
-          <div className={documentView === "preview" ? "a4-contract-preview" : "a4-offscreen"} aria-hidden={documentView !== "preview"}>
-            <A4Document id="contract-document" header={<CiprianoDocumentHeader title={maintenance ? "Contrato de manutenção mensal" : "Contrato da proposta"} number={contract.proposalNumber || "Minuta"} tagline={settings.tagline} meta={[`Minuta · Rev. ${String(contract.documentRevision).padStart(2, "0")}`, `Cliente · ${contract.clientName}`, `Início · ${fmtDate(startDate)}`]} />} footer={contractFooter}>
-              <ContractBlocks text={text} />
-            </A4Document>
-          </div></div></div><div className="border-t border-line/40 px-5 py-3 text-[10.5px] leading-relaxed text-steel">Os campos entre colchetes são pendências. A prévia A4, o PDF e a impressão usam a mesma paginação, com rodapé numerado. Ao salvar, a versão anterior é guardada no histórico.</div></section>
+        <section className="card overflow-hidden"><div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/50 px-5 py-4"><div><div className="label-mono text-signal">Documento editável</div><h2 className="mt-1 font-display text-[15px] font-semibold text-white">Minuta do contrato</h2></div><span className="text-[10.5px] text-steel">Clique no texto para editar qualquer cláusula</span></div><div className="bg-[#091626] p-3 sm:p-5"><div className="mx-auto max-w-[820px] overflow-hidden rounded-sm bg-white shadow-xl"><div className="flex items-center justify-between border-b-[3px] border-[#00d4eb] bg-[#0a192f] px-6 py-4">{/* eslint-disable-next-line @next/next/no-img-element */}<img src="/logo-cipriano.svg" alt="Cipriano Tech & Security" style={{ width: 190, height: "auto" }} /><div className="text-right font-mono text-[8px] uppercase tracking-wider text-[#91a6bc]">Minuta contratual<br/>Revisão {String(contract.documentRevision).padStart(2, "0")}</div></div><textarea aria-label="Texto integral do contrato" spellCheck className="min-h-[1050px] w-full resize-y border-0 bg-white px-6 py-6 font-sans text-[12.5px] leading-[1.8] text-[#283a50] outline-none sm:px-10" value={text} onChange={(e) => { setText(e.target.value); setAiApplied(false); changed(); }} placeholder="Digite ou cole aqui o texto integral do contrato. Para gerar uma minuta com base em uma proposta, crie um novo contrato a partir dela."/></div></div><div className="border-t border-line/40 px-5 py-3 text-[10.5px] leading-relaxed text-steel">Os campos entre colchetes são pendências para preencher. Ao salvar, a versão anterior do texto é guardada no histórico.</div></section>
         {maintenance ? <section id="reajuste" className="card p-5 scroll-mt-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="label-mono text-signal">Planejamento anual</div><h2 className="mt-1 font-display text-[16px] font-semibold text-white">Compare e escolha o reajuste</h2><p className="mt-1 text-[11px] text-steel">Próximo aniversário: {fmtDate(contract.nextReadjustAt)} · mensalidade atual {brl(contract.monthlyCents / 100)}</p></div><span className={`chip ${contract.alert ? "!border-amber/40 !text-amber" : "!border-line"}`}><CalendarClock size={11}/>{contract.overdue ? "Aguardando aplicação" : `em ${contract.daysToReadjust} dias`}</span></div><div className="mt-4"><IndexComparisonPanel comparison={contract.comparison} selected={readjustIndex} onSelect={setReadjustIndex} monthlyCents={contract.monthlyCents}/></div><div className="mt-4 grid gap-2 sm:grid-cols-2"><Field label="Índice para este reajuste"><select className="field" value={isOfficialIndex(readjustIndex) ? readjustIndex : "OUTRO"} onChange={(e) => setReadjustIndex(e.target.value === "OUTRO" ? "OUTRO" : e.target.value)}>{INDEXES.map((i) => <option key={i.id} value={i.id}>{i.id} · {i.publisher}</option>)}<option value="OUTRO">Outro índice (manual)</option></select></Field><Field label="Percentual acumulado manual (opcional)"><input className="field" value={manualPct} onChange={(e) => setManualPct(e.target.value)} placeholder="Deixe vazio para usar o índice oficial"/></Field>{!isOfficialIndex(readjustIndex) ? <Field label="Nome do índice"><input className="field" value={readjustIndex === "OUTRO" ? "" : readjustIndex} onChange={(e) => setReadjustIndex(e.target.value || "OUTRO")} placeholder="Nome do índice"/></Field> : null}<Field label="Observação do reajuste"><input className="field" value={readjustNote} onChange={(e) => setReadjustNote(e.target.value)} placeholder="Ex.: acordo comunicado ao cliente"/></Field></div>{readjustIndex !== contract.indexName ? <label className="mt-3 flex items-start gap-2 rounded-lg border border-amber/30 bg-amber/5 p-2.5 text-[11px] leading-relaxed text-silver"><input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5"/> Confirmo que a mudança do índice pactuado foi acordada com o cliente. Atualize também a cláusula da minuta.</label> : null}<div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line/60 bg-abyss2/50 p-3"><div><div className="label-mono">Valor simulado {chosenPct !== null ? `· ${formatIndexPct(chosenPct)}` : ""}</div><div className="mt-1 font-display text-[17px] font-semibold text-white">{projected !== null ? `${brl(projected / 100)} / mês` : "Aguardando dados do período"}</div><div className="mt-1 text-[10px] text-steel">{contract.daysToReadjust > 0 ? "Simulação: o reajuste pode ser aplicado a partir do aniversário." : "Confira o contrato e as condições antes de aplicar."}</div></div><button className="btn btn-primary" disabled={busy !== "" || contract.daysToReadjust > 0 || contract.status !== "ativo" || chosenPct === null} onClick={applyReadjust}><CheckCircle2 size={14}/> Aplicar reajuste</button></div><p className="mt-2 text-[10.5px] leading-relaxed text-steel">Para usar outro índice, insira o percentual acumulado manualmente. A alteração de um índice contratado depende de acordo; os percentuais negativos não são ignorados automaticamente.</p></section> : null}
       </div>
       <aside className="space-y-3"><section className="rounded-xl border border-signal/25 bg-gradient-to-br from-[#0c3040] via-[#0a2035] to-[#071624] p-4"><div className="flex items-center gap-2 text-signal"><Sparkles size={16}/><span className="label-mono !text-signal">Assistente de redação</span></div><h2 className="mt-2 font-display text-[15px] font-semibold text-white">Refaça com suas alterações</h2><p className="mt-1.5 text-[11px] leading-relaxed text-steel">Edite o texto ao lado ou descreva o que deve mudar. A IA considera a versão atual, inclusive suas edições ainda não salvas.</p><textarea className="field mt-3 min-h-[95px] text-[11.5px] leading-relaxed" value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Ex.: alterar a frequência para visita trimestral e incluir atendimento remoto."/><button className="btn btn-primary mt-2 w-full" disabled={busy !== "" || !text.trim()} onClick={rewrite}><Sparkles size={14}/>{busy === "ai" ? "Redigindo..." : "Redigir novamente com IA"}</button><p className="mt-2 text-[10px] leading-relaxed text-steel">{aiEnabled ? "O texto do contrato e suas instruções serão enviados ao provedor de IA configurado." : "IA generativa indisponível: configure OPENAI_API_KEY no servidor. A edição manual continua disponível."}</p></section>
@@ -138,20 +147,6 @@ export function ContractEditor({ initial, observations, revisions, aiEnabled, se
       </aside>
     </div>
   </div>;
-}
-
-function ContractBlocks({ text }: { text: string }) {
-  const paragraphs = text.replace(/\r/g, "").split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
-  return <>{paragraphs.map((paragraph, index) => {
-    const firstLine = paragraph.split("\n")[0] ?? "";
-    const title = index === 0;
-    const heading = !title && paragraph.length < 160 && (/^\d+\.\s/.test(firstLine) || (firstLine === firstLine.toUpperCase() && /[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ]/.test(firstLine)));
-    const signature = /^_{3,}/.test(paragraph);
-    if (title) return <div key={index} data-pdf-block data-pdf-atomic><h1 className="a4-contract-title">{paragraph}</h1></div>;
-    if (heading) return <div key={index} data-pdf-block data-pdf-keep-next data-pdf-atomic><h2 className="a4-contract-heading">{paragraph}</h2></div>;
-    if (signature) return <div key={index} data-pdf-block data-pdf-atomic><p className="a4-contract-signature">{paragraph}</p></div>;
-    return <div key={index} data-pdf-block data-pdf-split="text" data-pdf-source="contract" data-pdf-key={`contract-${index}`}><p className="a4-contract-paragraph" data-pdf-text>{paragraph}</p></div>;
-  })}</>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block"><span className="label-mono mb-1.5 block">{label}</span>{children}</label>; }

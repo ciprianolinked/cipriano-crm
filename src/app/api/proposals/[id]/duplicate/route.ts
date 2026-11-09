@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, proposals } from "@/db/schema";
 import { nextProposalNumber } from "@/lib/data";
@@ -15,11 +15,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const rows = await db.select().from(proposals).where(eq(proposals.id, id)).limit(1);
   if (rows.length === 0) return NextResponse.json({ error: "Proposta não encontrada." }, { status: 404 });
   const source = rows[0];
+  const groupId = source.revisionGroupId ?? source.id;
+  const family = isRevision
+    ? await db.select({ revision: proposals.revision }).from(proposals).where(or(eq(proposals.id, groupId), eq(proposals.revisionGroupId, groupId)))
+    : [];
   const number = await nextProposalNumber();
 
-  const revisionNumber = isRevision ? (source.revision ?? 1) + 1 : 1;
+  const revisionNumber = isRevision ? Math.max(source.revision ?? 1, ...family.map((r) => r.revision)) + 1 : 1;
   const parentId = isRevision ? id : null;
-  const revisionGroupId = isRevision ? (source.revisionGroupId ?? source.id) : source.id;
+  const revisionGroupId = isRevision ? groupId : source.id;
 
   const [row] = await db
     .insert(proposals)

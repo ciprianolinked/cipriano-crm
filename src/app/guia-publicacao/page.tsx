@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { ArrowRight, CircleAlert, Database, Download, ExternalLink, ShieldCheck } from "lucide-react";
 import { CodeBlock } from "@/components/ui/CopyButton";
 import { Logo } from "@/components/ui/Logo";
+import { GitHubPublishDownload } from "@/components/system/GitHubPublishDownload";
 
 export const dynamic = "force-static";
 export const metadata: Metadata = {
@@ -19,13 +20,12 @@ const steps = [
   {
     id: "01", title: "Envie o código ao GitHub", time: "~10 min",
     items: [
-      "Crie um repositório privado no GitHub. Confirme que .gitignore e .env.example estão presentes, mas que nenhuma senha real foi commitada.",
-      "Se o GitHub recusar com “Yowza / Nossa, isso é muito arquivo”, é o limite de 100 arquivos do navegador somado ao node_modules (33 mil arquivos). Baixe o código limpo (ZIP) no aviso no topo desta página e use o GitHub Desktop — veja a seção azul “Erro no GitHub”.",
-      "Rode ./scripts/publicar-github.sh com a URL do repositório. O script confere o .gitignore (node_modules, .next e .env ficam de fora), faz o commit e envia. Também pede nome e e-mail do Git na primeira execução.",
-      "Se preferir, use os comandos manuais abaixo ou o GitHub Desktop. Pela web, envie pasta por pasta: raiz (11), public (3), drizzle (5), scripts (1), src/db (2), src/lib (15), src/components (28) e src/app (46).",
+      "Baixe o projeto limpo no início deste guia e extraia o ZIP em uma pasta nova. Não arraste node_modules, .next ou .env para o navegador do GitHub.",
+      "Crie um repositório privado e use GitHub Desktop ou Git para enviar a pasta extraída. O limite de 100 arquivos é do upload pelo navegador, não de um commit Git.",
+      "Faça commit e push da branch conectada à Vercel (normalmente main). Confira .gitignore e .env.example; nenhuma senha real deve ser commitada.",
     ],
-    code: `# Recomendado: um comando, sem limite de arquivos\n./scripts/publicar-github.sh https://github.com/SEU-USUARIO/cipriano-propostas.git\n\n# Com Personal Access Token (opcional)\nGITHUB_TOKEN=ghp_XXXX ./scripts/publicar-github.sh https://github.com/SEU-USUARIO/cipriano-propostas.git\n\n# Manual, se preferir\ngit init -b main\ngit add .\ngit commit -m "feat: central de propostas, CRM e contratos"\ngit remote add origin https://github.com/SEU-USUARIO/cipriano-propostas.git\ngit push -u origin main`,
-    links: [{ label: "Baixar código limpo (ZIP)", href: "/cipriano-fontes.zip" }, { label: "Criar repositório", href: "https://github.com/new" }, { label: "GitHub Desktop", href: "https://desktop.github.com" }],
+    code: `git remote -v\ngit status\ngit add .\ngit commit -m "fix: conexao Neon e guia de publicacao"\ngit push origin main`,
+    links: [{ label: "Criar repositório", href: "https://github.com/new" }],
   },
   {
     id: "02", title: "Prepare o banco no Neon", time: "~10 min",
@@ -63,7 +63,6 @@ const steps = [
 ];
 
 const failures = [
-  ["GitHub: “Yowza / Nossa, isso é muito arquivo”", "O navegador limita a 100 arquivos por envio e o node_modules tem mais de 33 mil. Baixe o código limpo (ZIP) no topo desta página, extraia e publique pelo GitHub Desktop (File → Add local repository → Commit → Publish) ou por ./scripts/publicar-github.sh. Nunca arraste a pasta com node_modules."],
   ["env_missing / env_invalid", "Adicione/corrija DATABASE_URL em Production e faça um novo deploy. O .env local não é enviado ao GitHub."],
   ["schema_missing / schema_incomplete", "Execute o SQL completo no mesmo branch e database da conexão. Depois abra /diagnostico e clique em Verificar conexão."],
   ["auth_failed / database_not_found", "Copie uma conexão atual do Neon. Confira usuário, senha, branch e nome do database."],
@@ -82,50 +81,10 @@ export default function PublishingGuidePage() {
         <div className="mt-4 flex flex-wrap gap-2"><span className="chip">Next.js 16</span><span className="chip">Node.js 22.x</span><span className="chip">PostgreSQL · Neon</span><span className="chip">10 tabelas · sem dados de exemplo</span></div>
       </header>
 
+      <div className="mt-5"><GitHubPublishDownload /></div>
+
       <section className="mt-5 rounded-xl border border-amber/35 bg-amber/5 p-5">
         <div className="flex gap-3"><CircleAlert size={21} className="mt-0.5 shrink-0 text-amber" /><div><h2 className="font-display text-[16px] font-semibold text-white">Publicou na Vercel, mas a página não carrega?</h2><p className="mt-2 text-[12px] leading-relaxed text-silver">A imagem de erro não identifica sozinha a causa. O mais comum é a conexão de produção não estar configurada ou o SQL ainda não ter sido executado no banco correto. Siga esta ordem:</p><ol className="mt-3 space-y-1.5 text-[12px] text-silver"><li><b className="text-amber">1.</b> Execute o SQL no Neon → <b className="text-white">mesmo branch e database</b> da Vercel.</li><li><b className="text-amber">2.</b> Configure <code className="text-signal">DATABASE_URL</code> em Production.</li><li><b className="text-amber">3.</b> Faça um <b className="text-white">novo deploy</b> e teste <code className="text-signal">/api/health</code>.</li></ol><div className="mt-4 flex flex-wrap gap-2"><Link href="/diagnostico" className="btn btn-primary py-2">Verificar este deployment<ArrowRight size={14} /></Link><a href="#banco-neon-sql" className="btn py-2">Ir direto ao SQL</a></div></div></div>
-      </section>
-
-      <section id="github-upload" className="mt-5 scroll-mt-5 rounded-xl border border-signal/40 bg-signal/[0.06] p-5 lg:p-6">
-        <div className="flex items-center gap-2 label-mono text-signal"><CircleAlert size={15} />Erro no GitHub ao enviar arquivos</div>
-        <h2 className="mt-2 font-display text-[19px] font-semibold text-white">“Yowza, that’s a lot of files. Try uploading fewer than 100 at a time.”</h2>
-        <p className="mt-2 max-w-3xl text-[12.5px] leading-relaxed text-silver">
-          Esse aviso aparece quando você arrasta a pasta para o site do GitHub. O envio pelo navegador aceita no máximo
-          <b className="text-white"> 100 arquivos por vez</b>, e a pasta do projeto tem a subpasta <code className="text-signal">node_modules</code> com
-          <b className="text-white"> mais de 33 mil arquivos</b>. Não é falta de espaço — é o limite do navegador. A solução é enviar o
-          <b className="text-white"> código limpo</b>, sem o <code className="text-signal">node_modules</code>.
-        </p>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <a href="/cipriano-fontes.zip" download className="btn btn-primary"><Download size={15} />Baixar código limpo (ZIP · 260 KB)</a>
-          <a href="https://desktop.github.com" target="_blank" rel="noopener noreferrer" className="btn">Baixar GitHub Desktop<ExternalLink size={13} /></a>
-        </div>
-        <div className="mt-3 flex gap-2 rounded-lg border border-armed/25 bg-armed/5 p-3 text-[11.5px] leading-relaxed text-silver">
-          <ShieldCheck size={16} className="mt-0.5 shrink-0 text-armed" />
-          <p>O ZIP já vem <b className="text-armed">sem node_modules, sem .next e sem senhas (.env)</b>. São 112 arquivos de código. Ao publicar, a Vercel instala as dependências sozinha — você não precisa enviar o <code className="text-signal">node_modules</code>.</p>
-        </div>
-
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          <div className="rounded-lg border border-line/60 bg-abyss2/50 p-4">
-            <div className="label-mono text-signal">Mais fácil · sem terminal</div>
-            <h3 className="mt-1 font-display text-[14px] font-semibold text-white">GitHub Desktop</h3>
-            <ol className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-silver">
-              <li><b className="text-signal">1.</b> Baixe o ZIP acima e <b className="text-white">extraia</b> (botão direito → Extrair tudo). Abre a pasta <code className="text-signal">cipriano-propostas</code>.</li>
-              <li><b className="text-signal">2.</b> Instale o <b className="text-white">GitHub Desktop</b> e entre com sua conta do GitHub.</li>
-              <li><b className="text-signal">3.</b> Menu <b className="text-white">File → Add local repository</b> → escolha a pasta extraída → clique em <b className="text-white">create a repository</b>.</li>
-              <li><b className="text-signal">4.</b> Escreva uma mensagem (ex.: “primeira versão”) e clique em <b className="text-white">Commit to main</b>.</li>
-              <li><b className="text-signal">5.</b> Clique em <b className="text-white">Publish repository</b>, marque <b className="text-white">Keep this code private</b> e publique.</li>
-            </ol>
-            <p className="mt-2 text-[11px] leading-relaxed text-steel">O GitHub Desktop lê o <code className="text-signal">.gitignore</code> e ignora o node_modules sozinho. Sem limite de 100 arquivos.</p>
-          </div>
-          <div className="rounded-lg border border-line/60 bg-abyss2/50 p-4">
-            <div className="label-mono text-signal">Alternativa · terminal</div>
-            <h3 className="mt-1 font-display text-[14px] font-semibold text-white">Um comando</h3>
-            <p className="mt-2 text-[12px] leading-relaxed text-silver">Dentro da pasta extraída, rode o script que já confere o <code className="text-signal">.gitignore</code>, faz o commit e envia:</p>
-            <div className="mt-2"><CodeBlock title="bash · sem limite de arquivos" code={`./scripts/publicar-github.sh https://github.com/SEU-USUARIO/cipriano-propostas.git`} /></div>
-            <p className="mt-2 text-[11px] leading-relaxed text-steel">Prefere enviar mesmo pelo navegador? Aí sim, envie <b className="text-silver">pasta por pasta</b> (cada uma tem menos de 100): raiz, public, drizzle, scripts, src/db, src/lib, src/components e src/app. Nunca arraste a pasta inteira com node_modules.</p>
-          </div>
-        </div>
       </section>
 
       <nav className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Etapas de publicação">{steps.map((step) => <a key={step.id} href={`#passo-${step.id}`} className="card p-4 transition hover:border-signal/50"><div className="flex justify-between"><span className="font-mono text-[10px] text-signal">{step.id}</span><span className="text-[10px] text-steel">{step.time}</span></div><h2 className="mt-2 font-display text-[13px] font-semibold text-white">{step.title}</h2></a>)}</nav>

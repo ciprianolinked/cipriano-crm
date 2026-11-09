@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { activities, maintenanceContracts, proposals } from "@/db/schema";
+import { activities, proposals } from "@/db/schema";
+import { deleteProposalFamily } from "@/lib/proposal/delete";
 import { calcTotals } from "@/lib/proposal/catalog";
 import { isProposalType, isStage, type ProposalItem, type ProposalSection } from "@/lib/proposal/types";
 
@@ -119,13 +120,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const existing = await db.select({ id: proposals.id }).from(proposals).where(eq(proposals.id, id)).limit(1);
-  if (existing.length === 0) return NextResponse.json({ error: "Proposta não encontrada." }, { status: 404 });
-  await db.transaction(async (tx) => {
-    // Contratos já gerados continuam válidos (guardam snapshot); só removemos o vínculo ativo.
-    await tx.update(maintenanceContracts).set({ proposalId: null }).where(eq(maintenanceContracts.proposalId, id));
-    await tx.delete(activities).where(eq(activities.proposalId, id));
-    await tx.delete(proposals).where(eq(proposals.id, id));
-  });
-  return NextResponse.json({ ok: true });
+  const result = await deleteProposalFamily(id);
+  if (!result) return NextResponse.json({ error: "Proposta não encontrada." }, { status: 404 });
+  return NextResponse.json({ ok: true, ...result, preservedContracts: true });
 }

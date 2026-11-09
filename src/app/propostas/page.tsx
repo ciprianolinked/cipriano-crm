@@ -3,8 +3,8 @@ import { brl, fmtDate } from "@/lib/brand";
 import { ensureBootstrap, listProposals } from "@/lib/data";
 import { STAGES, PROPOSAL_TYPES } from "@/lib/proposal/types";
 import { isMaintenanceProposal } from "@/lib/proposal/maintenance-plan";
-import { ProposalRowActions } from "@/components/proposal/ProposalRowActions";
 import { loadDatabasePage } from "@/components/system/load-database-page";
+import { ProposalDeleteButton } from "@/components/proposal/ProposalDeleteButton";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,8 @@ export default async function ProposalsPage({
   const params = await searchParams;
   const includeArchived = params.arquivadas === "1";
   const typeFilter = params.tipo ?? "todos";
-  const rows = loaded.data
+  const allRows = loaded.data;
+  const rows = allRows
     .filter((p) => (includeArchived || !p.archived) && (typeFilter === "todos" || p.type === typeFilter))
     .sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
   const total = rows.reduce((a, p) => a + p.totalCents, 0);
@@ -85,6 +86,8 @@ export default async function ProposalsPage({
             <tbody>
               {rows.map((p) => {
                 const stage = STAGES.find((s) => s.id === p.status);
+                const groupId = p.revisionGroupId ?? p.id;
+                const revisionCount = allRows.filter((row) => (row.revisionGroupId ?? row.id) === groupId).length;
                 const expiry = new Date(new Date(p.issuedAt).getTime() + p.validityDays * 86_400_000);
                 const expired = expiry.getTime() < Date.now() && p.status !== "ganho" && p.status !== "perdido";
                 return (
@@ -111,7 +114,12 @@ export default async function ProposalsPage({
                     <td className={`px-4 py-2.5 text-[11px] ${expired ? "text-amber" : "text-steel"}`}>{fmtDate(expiry)}</td>
                     <td className="px-4 py-2.5 text-[11px] text-steel">{p.nextActionNote ?? "—"}</td>
                     <td className="px-4 py-2.5 text-right">
-                      <ProposalRowActions id={p.id} number={p.number} clientName={p.clientName} />
+                      <div className="flex flex-col items-end gap-2">
+                        <Link href={`/propostas/${p.id}`} className="text-[10.5px] text-signal hover:underline">
+                          Abrir / reformular
+                        </Link>
+                        <ProposalDeleteButton id={p.id} number={p.number} revisionCount={revisionCount} compact />
+                      </div>
                     </td>
                   </tr>
                 );

@@ -7,6 +7,7 @@ import { calcTotals, defaultBriefing } from "@/lib/proposal/catalog";
 import { generateProposal } from "@/lib/proposal/generate";
 import { validateMaintenancePlan } from "@/lib/proposal/maintenance-plan";
 import { isProposalType, type Briefing, type ProposalDraft } from "@/lib/proposal/types";
+import { deleteProposalFamily } from "@/lib/proposal/delete";
 
 export const dynamic = "force-dynamic";
 
@@ -137,6 +138,7 @@ export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID obrigatório." }, { status: 400 });
-  await db.delete(proposals).where(eq(proposals.id, id));
-  return NextResponse.json({ ok: true });
+  const result = await deleteProposalFamily(id);
+  if (!result) return NextResponse.json({ error: "Proposta não encontrada." }, { status: 404 });
+  return NextResponse.json({ ok: true, ...result, preservedContracts: true });
 }
