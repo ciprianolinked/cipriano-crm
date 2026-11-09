@@ -1,90 +1,95 @@
-# Cipriano Tech & Security — Propostas, CRM e Contratos
+# Cipriano Tech & Security — Central de Propostas, CRM e Contratos
 
-Aplicação Next.js 16 com PostgreSQL/Drizzle, propostas e contratos em PDF A4, CRM, manutenção mensal e consulta de CNPJ.
+Aplicativo interno de vendas: propostas comerciais em A4, contratos, CRM com kanban,
+manutenção mensal com reajuste por IPCA/IGP-M/INPC e cadastro de clientes por CNPJ.
 
-## Erro do GitHub: “menos de 100 arquivos por vez”
+## Publicação no GitHub
 
-Esse é um limite do **upload pelo navegador do GitHub**, não um limite do projeto nem da Vercel. Não arraste a pasta de instalação inteira: `node_modules` contém milhares de dependências que são instaladas novamente com `npm ci`.
+O upload pelo **navegador do GitHub** aceita no máximo **100 arquivos por envio**.
+Este projeto tem 110 arquivos de código e `node_modules` tem mais de 33 mil — por isso
+o site recusa com *"Nossa, isso é muito arquivo. Tente enviar menos de 100 de uma vez."*
 
-Em **/guia-publicacao#github-upload** há duas formas de baixar o projeto limpo:
+### Caminho mais fácil (sem terminal): ZIP limpo + GitHub Desktop
 
-- **Upload pelo navegador:** baixe os dois ZIPs de lotes. Cada lote tem menos de 100 arquivos e deve ser enviado em um commit separado para o mesmo repositório. Importe na Vercel somente depois de enviar os dois.
-- **GitHub Desktop ou terminal Git (recomendado):** baixe o ZIP completo, extraia e publique todos os arquivos em um único commit.
+1. Baixe o **código limpo** em [`/cipriano-fontes.zip`](public/cipriano-fontes.zip) (ou pelo botão no Guia de publicação). Ele já vem **sem `node_modules`, sem `.next` e sem `.env`**.
+2. Extraia o ZIP (abre a pasta `cipriano-propostas`).
+3. Instale o [GitHub Desktop](https://desktop.github.com/) e entre na sua conta.
+4. **File → Add local repository** → escolha a pasta extraída → **create a repository**.
+5. Escreva uma mensagem e clique em **Commit to main** → **Publish repository** (marque *private*).
 
-Os pacotes excluem dependências instaladas, builds, caches, arquivos `.env` e dados do banco. O manifesto do pacote lista os arquivos e seus hashes SHA-256.
+O GitHub Desktop ignora o `node_modules` sozinho e não tem o limite de 100 arquivos.
 
-**Extraia cada ZIP antes de publicar. Não envie o ZIP sozinho como se fosse o código do site.** O repositório deve ter `package.json`, `src/` e os demais arquivos na raiz.
-
-### Opção recomendada: GitHub Desktop (sem limite de 100 arquivos do navegador)
-
-1. Instale o GitHub Desktop e entre na sua conta.
-2. Crie um repositório vazio no GitHub, de preferência privado.
-3. Extraia o ZIP em uma pasta nova no computador.
-4. No GitHub Desktop: **File → Add local repository** e selecione a pasta extraída. Se a opção aparecer, escolha **create a repository** para inicializar Git nessa pasta.
-5. Confira os arquivos: não devem aparecer `node_modules`, `.next`, `.env` ou chaves privadas.
-6. Faça o commit inicial e clique em **Publish repository**. Selecione o repositório/conta corretos e mantenha privado se necessário.
-7. Importe o repositório na Vercel **depois que todos os arquivos estiverem no GitHub**.
-
-O Git/GitHub Desktop envia o commit completo; não é necessário dividir o código em vários envios de 100 arquivos.
-
-### Alternativa: terminal Git
-
-Crie um repositório vazio no GitHub. Abra o terminal **dentro da pasta extraída** e substitua os placeholders na URL abaixo:
+### Alternativa: publicar por Git (sem limite de arquivos)
 
 ```bash
-git init
+./scripts/publicar-github.sh https://github.com/SEU-USUARIO/cipriano-propostas.git
+```
+
+Para regenerar o ZIP limpo depois de alterar o código: `python3 scripts/gerar-zip-fontes.py`.
+
+O script valida o `.gitignore`, faz o commit e envia. Com token de acesso pessoal:
+
+```bash
+GITHUB_TOKEN=ghp_XXXX ./scripts/publicar-github.sh https://github.com/SEU-USUARIO/cipriano-propostas.git
+```
+
+Comandos manuais, se preferir:
+
+```bash
+git init -b main
 git add .
-git status --short
-git commit -m "Publicar painel Cipriano"
-git branch -M main
-git remote add origin https://github.com/SEU-USUARIO/SEU-REPOSITORIO.git
+git commit -m "feat: central de propostas, CRM e contratos"
+git remote add origin https://github.com/SEU-USUARIO/cipriano-propostas.git
 git push -u origin main
 ```
 
-Se a pasta já tiver um remoto, confira `git remote -v`; não adicione um remoto duplicado. Nunca use force push para sobrescrever um repositório existente sem conferir o histórico. Configure nome/e-mail do Git se solicitado. A autenticação é feita pelo GitHub/Gerenciador de Credenciais, não colocando tokens na URL.
+Sem Git instalado, use o [GitHub Desktop](https://desktop.github.com/) (arraste a pasta
+do projeto — ele ignora `node_modules` automaticamente).
 
-### Se já enviou arquivos demais
+### Alternativa: upload por lotes no navegador
 
-- Não envie `node_modules`, `.next`, `.vercel`, caches ou `.env`.
-- Se esses arquivos já foram commitados, remova-os do índice com `git rm -r --cached node_modules .next` (somente as pastas que existirem no índice), confira `.gitignore` e faça um novo commit.
-- Se uma senha chegou a ser commitada, **rotacione a credencial**. Apagar o arquivo no último commit não remove segredos do histórico.
-- O `.gitignore` protege commits Git; ele **não filtra arquivos arrastados pelo navegador**.
+Se precisar usar o site do GitHub, envie **pasta por pasta** (cada lote fica abaixo de 100):
 
-## Neon e Vercel
+| Lote | Caminho | Arquivos |
+| --- | --- | --- |
+| 1 | raiz (`package.json`, `tsconfig.json`, `.gitignore`, `README.md`, etc.) | 11 |
+| 2 | `public/` | 3 |
+| 3 | `drizzle/` | 5 |
+| 4 | `scripts/` | 1 |
+| 5 | `src/db/` | 2 |
+| 6 | `src/lib/` | 15 |
+| 7 | `src/components/` | 28 |
+| 8 | `src/app/` | 46 |
 
-1. No Neon, abra o SQL Editor no branch/database correto e execute `public/neon-setup.sql`. O script é idempotente e não apaga registros.
-2. Na Vercel, configure `DATABASE_URL` em **Settings → Environment Variables → Production**, usando a conexão pooled do Neon. Não use `NEXT_PUBLIC_DATABASE_URL`.
-3. Opcional: configure `OPENAI_API_KEY` no servidor para recursos generativos.
-4. Use Node.js 22.x, framework Next.js e comando de build `npm run build`.
-5. Faça um novo deployment depois de alterar variáveis.
-6. Valide `/api/health`: o esperado é `ok: true` e `code: "ready"`.
+Total: 111 arquivos em 8 lotes, todos abaixo de 100.
 
-O guia completo fica em `/guia-publicacao`; o diagnóstico, em `/diagnostico`.
+**Nunca envie** `node_modules/`, `.next/`, `.vercel/` ou qualquer arquivo `.env`.
+Eles estão no `.gitignore`; o único arquivo de exemplo permitido é o `.env.example`.
 
-## Desenvolvimento local
+## Estrutura
 
-Requer Node.js 22.x e PostgreSQL. Crie `.env.local` a partir de `.env.example` e preencha as variáveis localmente. Não commite credenciais.
+- `src/app` — páginas (propostas, CRM, contratos, catálogo, guia de publicação) e APIs.
+- `src/components` — interface, documentos A4 paginados e exportação de PDF.
+- `src/lib` — regras de negócio: propostas, contratos, índices econômicos, CNPJ.
+- `src/db` — Drizzle ORM e schema PostgreSQL.
+- `drizzle/` e `public/neon-setup.sql` — estrutura do banco para o Neon.tech.
+
+## Ambiente
+
+| Variável | Obrigatória | Descrição |
+| --- | --- | --- |
+| `DATABASE_URL` | Sim | Conexão PostgreSQL (Neon) com `sslmode=require` |
+| `OPENAI_API_KEY` | Não | Habilita redação e reescrita de contratos com IA |
+
+## Comandos
 
 ```bash
-npm ci
-npx drizzle-kit push
-npm run dev
+npm install        # dependências
+npm run dev        # desenvolvimento em http://localhost:3000
+npm run build      # build de produção
+npm run start      # servidor de produção
 ```
 
-Validação:
-
-```bash
-npx next typegen
-npm exec tsc -- --noEmit --pretty false
-npm run build
-```
-
-## Segurança e dados
-
-- O ZIP contém apenas código/configuração/assets públicos, não um dump do banco.
-- Dados de clientes, propostas e contratos ficam no PostgreSQL e não são exportados pelo pacote GitHub.
-- `.env.example` contém somente placeholders.
-- Antes de usar com dados reais, proteja o acesso ao painel. O aplicativo não possui autenticação própria integrada.
-- Minutas contratuais exigem revisão humana/jurídica antes da assinatura.
-
-Referência oficial: https://docs.github.com/en/repositories/working-with-files/managing-files/adding-a-file-to-a-repository
+Antes de publicar, execute o SQL de `public/neon-setup.sql` no Neon e configure
+`DATABASE_URL` na Vercel. O passo a passo completo está em **Guia de publicação**
+dentro do próprio aplicativo.

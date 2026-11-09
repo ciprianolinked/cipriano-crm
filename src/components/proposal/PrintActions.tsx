@@ -1,77 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { downloadA4Pdf, printA4Document, waitForDocument } from "@/components/documents/export";
 
 export function PrintActions({
   filename,
   compact = false,
+  targetId = "proposal-document",
+  title,
 }: {
   filename: string;
   compact?: boolean;
+  targetId?: string;
+  title?: string;
 }) {
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"pdf" | "print" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+  const [pageCount, setPageCount] = useState(0);
+
+  useEffect(() => {
+    const update = () => {
+      const root = document.getElementById(targetId);
+      setReady(root?.dataset.ready === "true");
+      setPageCount(Number(root?.dataset.pageCount ?? 0));
+    };
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["data-ready", "data-page-count"] });
+    window.addEventListener("a4-document-ready", update);
+    return () => { observer.disconnect(); window.removeEventListener("a4-document-ready", update); };
+  }, [targetId]);
 
   async function download() {
-    const element = document.getElementById("proposal-document");
-    if (!element) return;
-    setBusy(true);
-    setError(null);
+    setBusy("pdf"); setError(null);
     try {
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-        import("html2canvas"),
-        import("jspdf"),
-      ]);
-      if (document.fonts?.ready) await document.fonts.ready;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        backgroundColor: "#ffffff",
-        useCORS: true,
-        logging: false,
-        windowWidth: element.scrollWidth,
-      });
-      const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
-      const pageWidthMm = 210;
-      const pageHeightMm = 297;
-      const pxPerMm = canvas.width / pageWidthMm;
-      const pageHeightPx = Math.floor(pageHeightMm * pxPerMm);
-      let rendered = 0;
-      let page = 0;
-
-      while (rendered < canvas.height) {
-        const sliceHeight = Math.min(pageHeightPx, canvas.height - rendered);
-        const slice = document.createElement("canvas");
-        slice.width = canvas.width;
-        slice.height = sliceHeight;
-        const ctx = slice.getContext("2d");
-        if (!ctx) break;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, slice.width, slice.height);
-        ctx.drawImage(canvas, 0, rendered, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
-        const image = slice.toDataURL("image/jpeg", 0.94);
-        if (page > 0) pdf.addPage();
-        pdf.addImage(image, "JPEG", 0, 0, pageWidthMm, sliceHeight / pxPerMm, undefined, "FAST");
-        rendered += sliceHeight;
-        page += 1;
-      }
-      pdf.save(`${filename}.pdf`);
+      const root = await waitForDocument(targetId);
+      await downloadA4Pdf(root, filename, { title: title ?? filename, subject: "Documento A4 com rodapé numerado", author: "Cipriano Tech & Security" });
     } catch (err) {
-      console.error(err);
-      setError("Não foi possível gerar o PDF. Use “Imprimir / PDF” e escolha Salvar como PDF.");
-    } finally {
-      setBusy(false);
-    }
+      setError(err instanceof Error ? err.message : "Não foi possível gerar o PDF A4. Tente novamente.");
+    } finally { setBusy(null); }
+  }
+
+  async function print() {
+    setBusy("print"); setError(null);
+    try { await printA4Document(targetId); }
+    catch (err) { setError(err instanceof Error ? err.message : "Não foi possível preparar a impressão A4."); }
+    finally { setBusy(null); }
   }
 
   return (
-    <div className={compact ? "flex flex-wrap gap-2" : "flex flex-wrap gap-2"}>
-      <button type="button" onClick={download} disabled={busy} className="btn btn-primary no-print">
-        {busy ? "Gerando PDF…" : "Baixar PDF"}
+    <div className={compact ? "flex flex-wrap items-center gap-2" : "flex flex-wrap items-center gap-2"}>
+      <button type="button" onClick={download} disabled={busy !== null || !ready} className="btn btn-primary no-print">
+        {busy === "pdf" ? "Gerando PDF A4…" : "Baixar PDF A4"}
       </button>
-      <button type="button" onClick={() => window.print()} className="btn no-print">
-        Imprimir / PDF A4
+      <button type="button" onClick={print} disabled={busy !== null || !ready} className="btn no-print">
+        {busy === "print" ? "Preparando impressão…" : "Imprimir A4"}
       </button>
-      {error ? <p className="w-full text-[11px] text-alarm">{error}</p> : null}
+      <span className="no-print text-[10px] text-steel">{ready ? `${pageCount} página${pageCount === 1 ? "" : "s"} · 210 × 297 mm` : "Paginando documento…"}</span>
+      {error ? <p role="alert" className="w-full text-[11px] text-alarm">{error}</p> : null}
     </div>
   );
 }

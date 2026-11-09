@@ -280,6 +280,20 @@ export function ProposalEditor({
     router.push("/propostas");
   }
 
+  async function deleteProposal() {
+    if (!window.confirm(`Excluir a proposta ${proposal.number} de ${proposal.clientName}?\n\nEsta ação apaga a proposta e o histórico dela e não pode ser desfeita.`)) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/proposals/${proposal.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("delete failed");
+      router.push("/propostas");
+      router.refresh();
+    } catch {
+      setSaving(false);
+      window.alert("Não foi possível excluir a proposta. Tente novamente.");
+    }
+  }
+
   const stage = STAGES.find((s) => s.id === proposal.status) ?? STAGES[0];
 
   return (
@@ -318,6 +332,18 @@ export function ProposalEditor({
             >
               Gerar contrato (opcional)
             </Link>
+            <Link
+              href={`/propostas/nova?reformular=${proposal.id}`}
+              className="btn !border-signal/35 !text-signal"
+              onClick={(event) => {
+                if (dirty) {
+                  event.preventDefault();
+                  window.alert("Salve as alterações antes de reformular, ou descarte-as recarregando a página.");
+                }
+              }}
+            >
+              Reformular
+            </Link>
             <button className="btn" onClick={duplicate} disabled={saving}>
               Duplicar
             </button>
@@ -330,6 +356,9 @@ export function ProposalEditor({
             </button>
             <button className="btn" onClick={toggleArchive} disabled={saving}>
               {proposal.archived ? "Restaurar" : "Arquivar"}
+            </button>
+            <button className="btn !border-alarm/45 !text-alarm" onClick={deleteProposal} disabled={saving}>
+              Excluir
             </button>
             <button className="btn btn-primary" onClick={() => save()} disabled={saving}>
               {saving ? "Salvando…" : "Salvar"}

@@ -1,436 +1,78 @@
 .cip-doc {
-  width: 794px;
-  min-height: 1123px;
-  background: #ffffff;
   color: #33465e;
   font-family: "IBM Plex Sans", "Inter", Arial, sans-serif;
   font-size: 11.2px;
   line-height: 1.62;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.85);
-  overflow: hidden;
-}
-
-.cip-doc * {
-  box-sizing: border-box;
 }
 
 .cip-head {
   background: #0a192f;
-  padding: 30px 44px 24px;
+  padding: 24px 44px 20px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 24px;
   color: #c6d2e0;
+  border-bottom: 3px solid #00e5ff;
 }
 
-.cip-brand {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.cip-brand-name {
-  font-family: "Space Grotesk", "Inter", sans-serif;
-  font-size: 23px;
-  font-weight: 700;
-  letter-spacing: 0.015em;
-  color: #ffffff;
-  line-height: 1;
-}
-
-.cip-brand-sub {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 7.6px;
-  letter-spacing: 0.42em;
-  color: #00e5ff;
-  text-transform: uppercase;
-  margin-top: 7px;
-  padding-left: 6px;
-}
-
-.cip-brand-tag {
-  font-size: 9.4px;
-  color: #7d93ad;
-  margin-top: 8px;
-  max-width: 250px;
-  line-height: 1.45;
-}
-
-.cip-head-meta {
-  text-align: right;
-  min-width: 190px;
-}
-
-.cip-head-kicker {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 8.4px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: #00e5ff;
-}
-
-.cip-head-number {
-  font-family: "Space Grotesk", "Inter", sans-serif;
-  font-size: 22px;
-  font-weight: 600;
-  color: #ffffff;
-  letter-spacing: -0.02em;
-  margin-top: 4px;
-}
-
-.cip-head-meta div.cip-meta-line {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 8.6px;
-  letter-spacing: 0.1em;
-  color: #9fb2c7;
-  margin-top: 3px;
-  text-transform: uppercase;
-}
-
-.cip-rule {
-  height: 3px;
-  background: linear-gradient(90deg, #00e5ff 0%, #00e5ff 46%, #2f80ff 100%);
-}
+.cip-brand { display: flex; align-items: center; gap: 14px; }
+.cip-brand-name { font-family: "Space Grotesk", "Inter", sans-serif; font-size: 23px; font-weight: 700; letter-spacing: 0.015em; color: #ffffff; line-height: 1; }
+.cip-brand-sub { font-family: "IBM Plex Mono", monospace; font-size: 7.6px; letter-spacing: 0.42em; color: #00e5ff; text-transform: uppercase; margin-top: 7px; padding-left: 6px; }
+.cip-brand-tag { font-size: 9.4px; color: #7d93ad; margin-top: 8px; max-width: 250px; line-height: 1.45; }
+.cip-head-meta { text-align: right; min-width: 190px; max-width: 260px; }
+.cip-head-kicker { font-family: "IBM Plex Mono", monospace; font-size: 8.4px; letter-spacing: 0.24em; text-transform: uppercase; color: #00e5ff; }
+.cip-head-number { font-family: "Space Grotesk", "Inter", sans-serif; font-size: 22px; font-weight: 600; color: #ffffff; letter-spacing: -0.02em; margin-top: 4px; }
+.cip-head-meta div.cip-meta-line { font-family: "IBM Plex Mono", monospace; font-size: 8.6px; letter-spacing: 0.1em; color: #9fb2c7; margin-top: 3px; text-transform: uppercase; overflow-wrap: anywhere; }
 
 .cip-strip {
   display: grid;
   grid-template-columns: 1.3fr 1fr 1.2fr;
   gap: 14px;
-  padding: 14px 44px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
   background: #f4f8fc;
-  border-bottom: 1px solid #dce4ee;
-}
-
-.cip-strip-label {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 7.4px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: #7d93ad;
-  margin-bottom: 2px;
-}
-
-.cip-strip-value {
-  font-size: 10.4px;
-  color: #0a192f;
-  font-weight: 500;
-  line-height: 1.35;
-}
-
-.cip-strip-value small {
-  display: block;
-  font-weight: 400;
-  color: #5a6e88;
-  font-size: 9.4px;
-  margin-top: 1px;
-}
-
-.cip-body {
-  padding: 24px 44px 26px;
-  flex: 1;
-}
-
-.cip-sec {
-  margin-bottom: 17px;
-  break-inside: avoid;
-}
-
-.cip-sec-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-bottom: 6px;
-}
-
-.cip-sec-num {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  color: #00a8bd;
-  border: 1px solid #cfe9f0;
-  background: #f2fbfd;
-  border-radius: 3px;
-  padding: 1px 4px;
-}
-
-.cip-sec-title {
-  font-family: "Space Grotesk", "Inter", sans-serif;
-  font-size: 11.6px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: #0a192f;
-  white-space: nowrap;
-}
-
-.cip-sec-line {
-  flex: 1;
-  height: 1px;
-  background: #dce4ee;
-}
-
-.cip-p {
-  margin: 0 0 5px;
-  color: #33465e;
-  text-align: justify;
-}
-
-.cip-b {
-  display: flex;
-  gap: 6px;
-  margin: 0 0 3px;
-  color: #33465e;
-}
-
-.cip-b-marker {
-  color: #00a8bd;
-  font-weight: 600;
-  flex-shrink: 0;
-  line-height: 1.5;
-}
-
-.cip-space {
-  height: 5px;
-}
-
-.cip-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 9.6px;
-}
-
-.cip-table th {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 7.2px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #7d93ad;
-  text-align: left;
-  padding: 5px 6px;
-  background: #f4f8fc;
-  border-bottom: 1px solid #dce4ee;
-}
-
-.cip-table td {
-  padding: 5px 6px;
-  border-bottom: 1px solid #e8eff7;
-  vertical-align: top;
-  color: #33465e;
-}
-
-.cip-table td.num,
-.cip-table th.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.cip-table tr.total td {
-  border-top: 1px solid #0a192f;
-  border-bottom: none;
-  color: #0a192f;
-  font-weight: 600;
-}
-
-.cip-item-title {
-  color: #0a192f;
-  font-weight: 500;
-  font-size: 10px;
-}
-
-.cip-item-spec {
-  color: #7d93ad;
-  font-size: 8.7px;
-  line-height: 1.35;
-  margin-top: 1px;
-}
-
-.cip-group {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 7.8px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #0a192f;
-  background: #eef4fa;
-  padding: 4px 6px;
-  border-left: 2px solid #00e5ff;
-  margin: 10px 0 3px;
-}
-
-.cip-totals {
-  background: #0a192f;
-  color: #c6d2e0;
-  padding: 15px 18px;
-  border-radius: 3px;
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 14px;
-  align-items: center;
-}
-
-.cip-totals .cip-t-label {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 7.6px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #7d93ad;
-}
-
-.cip-totals .cip-t-value {
-  font-size: 11px;
-  color: #e8eff7;
-}
-
-.cip-totals .cip-t-big {
-  font-family: "Space Grotesk", "Inter", sans-serif;
-  font-size: 25px;
-  font-weight: 700;
-  color: #00e5ff;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-}
-
-.cip-totals .cip-t-sub {
-  font-size: 9px;
-  color: #9fb2c7;
-}
-
-.cip-mini-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 18px;
-  margin-top: 8px;
-}
-
-.cip-mini {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  border-bottom: 1px dotted #dce4ee;
-  padding-bottom: 3px;
-  font-size: 9.6px;
-}
-
-.cip-mini span:first-child {
-  color: #7d93ad;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 7.8px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  padding-top: 2px;
-}
-
-.cip-mini span:last-child {
-  color: #0a192f;
-  text-align: right;
-  font-weight: 500;
-}
-
-.cip-terms {
   border: 1px solid #dce4ee;
-  border-left: 3px solid #00e5ff;
-  background: #f9fbfd;
-  padding: 10px 12px;
-  margin-bottom: 8px;
 }
+.cip-strip-label { font-family: "IBM Plex Mono", monospace; font-size: 7.4px; letter-spacing: 0.2em; text-transform: uppercase; color: #7d93ad; margin-bottom: 2px; }
+.cip-strip-value { font-size: 10.4px; color: #0a192f; font-weight: 500; line-height: 1.35; overflow-wrap: anywhere; }
+.cip-strip-value small { display: block; font-weight: 400; color: #5a6e88; font-size: 9.4px; margin-top: 1px; }
 
-.cip-term-row {
-  display: grid;
-  grid-template-columns: 130px 1fr;
-  gap: 8px;
-  padding: 3px 0;
-  font-size: 9.8px;
-  border-bottom: 1px dotted #e4eaf2;
-}
+.cip-sec-head { display: flex; align-items: center; gap: 9px; margin: 10px 0 6px; }
+.cip-sec-num { font-family: "IBM Plex Mono", monospace; font-size: 9px; letter-spacing: 0.08em; color: #00a8bd; border: 1px solid #cfe9f0; background: #f2fbfd; border-radius: 3px; padding: 1px 4px; }
+.cip-sec-title { font-family: "Space Grotesk", "Inter", sans-serif; font-size: 11.6px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #0a192f; overflow-wrap: anywhere; }
+.cip-sec-line { flex: 1; height: 1px; background: #dce4ee; }
+.cip-p { margin: 0 0 5px; color: #33465e; text-align: justify; overflow-wrap: anywhere; white-space: pre-wrap; }
+.cip-b { display: flex; gap: 6px; margin: 0 0 3px; color: #33465e; }
+.cip-b-marker { color: #00a8bd; font-weight: 600; flex-shrink: 0; line-height: 1.5; }
+.cip-b-text { overflow-wrap: anywhere; white-space: pre-wrap; }
+.cip-space { height: 5px; }
 
-.cip-term-row:last-child {
-  border-bottom: none;
-}
+.cip-table { width: 100%; border-collapse: collapse; font-size: 9.6px; table-layout: fixed; }
+.cip-table th { font-family: "IBM Plex Mono", monospace; font-size: 7.2px; letter-spacing: 0.14em; text-transform: uppercase; color: #7d93ad; text-align: left; padding: 5px 6px; background: #f4f8fc; border-bottom: 1px solid #dce4ee; }
+.cip-table td { padding: 5px 6px; border-bottom: 1px solid #e8eff7; vertical-align: top; color: #33465e; overflow-wrap: anywhere; }
+.cip-table td.num, .cip-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.cip-table tr.total td { border-top: 1px solid #0a192f; border-bottom: none; color: #0a192f; font-weight: 600; }
+.cip-item-title { color: #0a192f; font-weight: 500; font-size: 10px; }
+.cip-item-spec { color: #7d93ad; font-size: 8.7px; line-height: 1.35; margin-top: 1px; }
+.cip-group { font-family: "IBM Plex Mono", monospace; font-size: 7.8px; letter-spacing: 0.16em; text-transform: uppercase; color: #0a192f; background: #eef4fa; padding: 4px 6px; border-left: 2px solid #00e5ff; margin: 10px 0 3px; }
 
-.cip-term-row b {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 7.8px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #7d93ad;
-  font-weight: 400;
-  padding-top: 2px;
-}
+.cip-totals { background: #0a192f; color: #c6d2e0; padding: 15px 18px; border-radius: 3px; display: grid; grid-template-columns: 1.1fr 1fr; gap: 14px; align-items: center; margin: 6px 0; }
+.cip-totals .cip-t-label { font-family: "IBM Plex Mono", monospace; font-size: 7.6px; letter-spacing: 0.18em; text-transform: uppercase; color: #7d93ad; }
+.cip-totals .cip-t-big { font-family: "Space Grotesk", "Inter", sans-serif; font-size: 25px; font-weight: 700; color: #00e5ff; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.cip-totals .cip-t-sub { font-size: 9px; color: #9fb2c7; }
+.cip-mini { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dotted #dce4ee; padding-bottom: 3px; font-size: 9.6px; }
+.cip-mini-row { margin-top: 5px; }
+.cip-mini span:first-child { color: #7d93ad; font-family: "IBM Plex Mono", monospace; font-size: 7.8px; letter-spacing: 0.1em; text-transform: uppercase; padding-top: 2px; flex: none; }
+.cip-mini span:last-child { color: #0a192f; text-align: right; font-weight: 500; overflow-wrap: anywhere; }
+.cip-totals .cip-mini { border-color: rgba(198,210,224,0.25); }
+.cip-totals .cip-mini span:last-child { color: #e8eff7; }
 
-.cip-sign {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 30px;
-  margin-top: 20px;
-}
-
-.cip-sign-line {
-  border-top: 1px solid #0a192f;
-  padding-top: 4px;
-  font-size: 8.8px;
-  color: #5a6e88;
-  font-family: "IBM Plex Mono", monospace;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.cip-foot {
-  margin-top: auto;
-  border-top: 2px solid #00e5ff;
-  padding: 10px 44px 16px;
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: center;
-  background: #fbfdff;
-}
-
-.cip-foot div {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 7.6px;
-  letter-spacing: 0.08em;
-  color: #7d93ad;
-  text-transform: uppercase;
-  line-height: 1.5;
-}
-
-.cip-foot strong {
-  color: #0a192f;
-  font-weight: 500;
-}
-
-.cip-seal {
-  margin-top: 6px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.cip-seal span {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 7px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #0a192f;
-  border: 1px solid #dce4ee;
-  border-radius: 2px;
-  padding: 1px 5px;
-}
-
-@media print {
-  .cip-doc {
-    box-shadow: none;
-    width: 210mm;
-    min-height: 0;
-  }
-  .cip-sec {
-    break-inside: avoid;
-  }
-  .cip-head {
-    padding-top: 22px;
-  }
-}
+.cip-terms { border: 1px solid #dce4ee; border-left: 3px solid #00e5ff; background: #f9fbfd; padding: 7px 10px; margin-bottom: 4px; }
+.cip-term-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; font-size: 9.8px; }
+.cip-term-row b { font-family: "IBM Plex Mono", monospace; font-size: 7.8px; letter-spacing: 0.12em; text-transform: uppercase; color: #7d93ad; font-weight: 400; padding-top: 2px; }
+.cip-term-value { overflow-wrap: anywhere; white-space: pre-wrap; }
+.cip-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 24px; }
+.cip-sign-line { border-top: 1px solid #0a192f; padding-top: 4px; font-size: 8.8px; color: #5a6e88; font-family: "IBM Plex Mono", monospace; letter-spacing: 0.06em; text-transform: uppercase; overflow-wrap: anywhere; }
+.cip-seal { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 5px; }
+.cip-seal span { font-family: "IBM Plex Mono", monospace; font-size: 7px; letter-spacing: 0.12em; text-transform: uppercase; color: #0a192f; border: 1px solid #dce4ee; border-radius: 2px; padding: 1px 5px; }

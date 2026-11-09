@@ -3,6 +3,7 @@ import { brl, fmtDate } from "@/lib/brand";
 import { ensureBootstrap, listProposals } from "@/lib/data";
 import { STAGES, PROPOSAL_TYPES } from "@/lib/proposal/types";
 import { isMaintenanceProposal } from "@/lib/proposal/maintenance-plan";
+import { ProposalRowActions } from "@/components/proposal/ProposalRowActions";
 import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
@@ -110,9 +111,7 @@ export default async function ProposalsPage({
                     <td className={`px-4 py-2.5 text-[11px] ${expired ? "text-amber" : "text-steel"}`}>{fmtDate(expiry)}</td>
                     <td className="px-4 py-2.5 text-[11px] text-steel">{p.nextActionNote ?? "—"}</td>
                     <td className="px-4 py-2.5 text-right">
-                      <Link href={`/propostas/${p.id}`} className="text-[10.5px] text-signal hover:underline">
-                        editar / PDF
-                      </Link>
+                      <ProposalRowActions id={p.id} number={p.number} clientName={p.clientName} />
                     </td>
                   </tr>
                 );
