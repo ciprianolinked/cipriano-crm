@@ -8,8 +8,8 @@ import { brl } from "@/lib/brand";
 import { PRIORITIES, SEGMENTS, defaultBriefing } from "@/lib/proposal/catalog";
 import { defaultMaintenancePlan, maintenanceSummary, validateMaintenancePlan } from "@/lib/proposal/maintenance-plan";
 import { MaintenancePlanFields } from "@/components/proposal/MaintenancePlanFields";
-import { CompetitorUpload } from "@/components/proposal/CompetitorUpload";
-import { PROPOSAL_TYPES, type Briefing, type CompetitorAnalysis, type MaintenancePlan, type ProposalDraft, type ProposalType, type Totals } from "@/lib/proposal/types";
+import { ReferencePanel } from "@/components/proposal/ReferencePanel";
+import { PROPOSAL_TYPES, type Briefing, type MaintenancePlan, type ProposalDraft, type ProposalType, type Totals } from "@/lib/proposal/types";
 import type { Insight } from "@/lib/ai";
 
 type ClientOption = { id: string; name: string; contactName: string | null; email: string | null; address: string | null; city: string | null; state: string | null };
@@ -24,7 +24,6 @@ export function NewProposalWizard({ clients, aiEnabled = false }: { clients: Cli
   const [plan, setPlan] = useState<MaintenancePlan>(defaultMaintenancePlan);
   const [rawNotes, setRawNotes] = useState("");
   const [wantsContract, setWantsContract] = useState(false);
-  const [competitorAnalysis, setCompetitorAnalysis] = useState<CompetitorAnalysis | null>(null);
   const [polish, setPolish] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,28 +38,6 @@ export function NewProposalWizard({ clients, aiEnabled = false }: { clients: Cli
     if (!c) { updateInfo({ clientId: "", clientName: "", contact: "", clientEmail: "", site: "" }); return; }
     updateInfo({ clientId: id, clientName: c.name, contact: c.contactName ?? "", clientEmail: c.email ?? "", site: [c.address, [c.city, c.state].filter(Boolean).join("/")].filter(Boolean).join(" — ") });
   }
-
-  function handleApplyCompetitor(analysis: CompetitorAnalysis) {
-    setCompetitorAnalysis(analysis);
-    if (analysis.recommendedBriefing) {
-      const rec = analysis.recommendedBriefing;
-      setBriefing((prev) => ({
-        ...prev,
-        cameras: rec.cameras !== undefined ? rec.cameras : prev.cameras,
-        doors: rec.doors !== undefined ? rec.doors : prev.doors,
-        fenceMeters: rec.fenceMeters !== undefined ? rec.fenceMeters : prev.fenceMeters,
-        alarm: rec.alarm !== undefined ? rec.alarm : prev.alarm,
-        intercom: rec.intercom !== undefined ? rec.intercom : prev.intercom,
-        network: rec.network !== undefined ? rec.network : prev.network,
-        priority: "orcamento",
-      }));
-      if (rec.notes) {
-        setRawNotes((prev) => (prev ? `${prev}\n\n${rec.notes}` : rec.notes ?? ""));
-      }
-    }
-    invalidate();
-  }
-
   async function generate() {
     setError("");
     if (!info.clientName.trim()) { setError("Informe o nome do cliente."); return; }
@@ -68,24 +45,7 @@ export function NewProposalWizard({ clients, aiEnabled = false }: { clients: Cli
     if (maintenance) { try { validateMaintenancePlan(plan); } catch (err) { setError(err instanceof Error ? err.message : "Confira a manutenção."); return; } }
     setLoading(true);
     try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...info,
-          type,
-          polish,
-          artIncluded: maintenance ? false : info.artIncluded,
-          briefing: {
-            ...briefing,
-            purpose,
-            wantsContract,
-            competitorAnalysis: competitorAnalysis ?? undefined,
-            ...(maintenance ? { maintenance: true, maintenancePlan: plan } : {}),
-            rawNotes,
-          },
-        }),
-      });
+      const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...info, type, polish, artIncluded: maintenance ? false : info.artIncluded, briefing: { ...briefing, purpose, wantsContract, ...(maintenance ? { maintenance: true, maintenancePlan: plan } : {}), rawNotes } }) });
       const data = await res.json() as Preview;
       if (!res.ok || !data.draft) throw new Error(data.error || "Não foi possível gerar. Tente novamente.");
       setPreview(data);
@@ -108,15 +68,8 @@ export function NewProposalWizard({ clients, aiEnabled = false }: { clients: Cli
   return <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
     <div className="space-y-4">
       <section className="card p-5"><div className="label-mono text-signal">Etapa 1 · objetivo</div><h2 className="mt-1 font-display text-lg font-semibold text-white">Qual proposta vamos elaborar?</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{([{ id: "projeto", title: "Projeto, produtos ou serviços", text: "Fornecimento, instalação ou serviço avulso.", Icon: FileText }, { id: "manutencao_mensal", title: "Manutenção mensal", text: "Preventiva e corretiva, com cobrança recorrente.", Icon: Wrench }] as const).map(({ id, title, text, Icon }) => <button type="button" key={id} className={`rounded-xl border p-4 text-left transition hover:border-signal/50 ${purpose === id ? "border-signal/55 bg-signal/[0.07]" : "border-line/60 bg-abyss2/40"}`} onClick={() => { setPurpose(id); invalidate(); }}><div className="flex items-center justify-between"><Icon size={19} className={purpose === id ? "text-signal" : "text-steel"}/>{purpose === id ? <Check size={15} className="text-signal"/> : null}</div><div className="mt-3 font-display text-[14px] font-semibold text-white">{title}</div><p className="mt-1 text-[11px] leading-relaxed text-steel">{text}</p></button>)}</div><div className="mt-5 border-t border-line/40 pt-4"><div className="label-mono mb-2">Formato do documento</div><div className="grid gap-2 sm:grid-cols-3">{PROPOSAL_TYPES.map((t) => <button type="button" key={t.id} onClick={() => { setType(t.id); invalidate(); }} className={`rounded-lg border p-3 text-left ${type === t.id ? "border-signal/50 bg-signal/5" : "border-line/50"}`}><div className={`text-[12px] font-medium ${type === t.id ? "text-signal" : "text-silver"}`}>{t.short}</div><p className="mt-1 text-[10px] leading-relaxed text-steel">{t.id === "completa" ? "Escopo e condições detalhados" : t.id === "simples" ? "Uma apresentação objetiva" : "Orçamento com itens e condições"}</p></button>)}</div></div></section>
+      <ReferencePanel />
       <section className="card p-5"><div className="label-mono text-signal">Etapa 2 · destinatário</div><h2 className="mt-1 font-display text-lg font-semibold text-white">Cliente e local</h2><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="block sm:col-span-2"><span className="label-mono mb-1.5 block">Cliente cadastrado</span><select className="field" value={info.clientId} onChange={(e) => applyClient(e.target.value)}><option value="">Digitar cliente manualmente</option>{clients.map((c) => <option value={c.id} key={c.id}>{c.name}</option>)}</select><p className="mt-1.5 text-[10.5px] text-steel">Precisa buscar os dados da empresa? <Link href="/clientes" className="text-signal hover:underline">Cadastre pelo CNPJ em Clientes →</Link></p></label><Field label="Nome do cliente *"><input className="field" value={info.clientName} onChange={(e) => updateInfo({ clientName: e.target.value })} placeholder="Nome do cliente"/></Field><Field label="Contato / cargo"><input className="field" value={info.contact} onChange={(e) => updateInfo({ contact: e.target.value })} placeholder="Responsável"/></Field><Field label="E-mail"><input className="field" type="email" value={info.clientEmail} onChange={(e) => updateInfo({ clientEmail: e.target.value })}/></Field><Field label="Local da prestação de serviços"><input className="field" value={info.site} onChange={(e) => updateInfo({ site: e.target.value })}/></Field><Field label="Validade da proposta (dias)"><input className="field" type="number" min={1} max={365} value={info.validityDays} onChange={(e) => updateInfo({ validityDays: Number(e.target.value) })}/></Field>{!maintenance ? <label className="flex items-center gap-2 text-[12px] text-silver"><input type="checkbox" checked={info.artIncluded} onChange={(e) => updateInfo({ artIncluded: e.target.checked })}/>Incluir ART / projeto executivo</label> : null}</div></section>
-
-      {/* Upload opcional de proposta do concorrente (até 6 arquivos) */}
-      <CompetitorUpload
-        clientNameHint={info.clientName}
-        initialAnalysis={competitorAnalysis}
-        onApplyAnalysis={handleApplyCompetitor}
-      />
-
       <section className="card p-5"><div className="label-mono text-signal">Etapa 3 · escopo e valores</div><h2 className="mt-1 font-display text-lg font-semibold text-white">{maintenance ? "Plano de manutenção mensal" : "Briefing técnico"}</h2><p className="mt-1 mb-4 text-[11px] leading-relaxed text-steel">{maintenance ? "Defina o que está incluído, os limites de atendimento e o valor de cada mês." : "Informe as quantidades e tecnologias previstas para este projeto."}</p>{maintenance ? <MaintenancePlanFields value={plan} onChange={(p) => { setPlan(p); invalidate(); }}/> : <><div className="grid grid-cols-2 gap-3">{([["cameras", "Câmeras IP"], ["doors", "Portas com acesso"], ["fenceMeters", "Perímetro (m)"]] as const).map(([key, label]) => <Field key={key} label={label}><input className="field" type="number" min={0} value={briefing[key]} onChange={(e) => updateBriefing({ [key]: Number(e.target.value) })}/></Field>)}<Field label="Segmento"><select className="field" value={briefing.segment} onChange={(e) => updateBriefing({ segment: e.target.value })}>{SEGMENTS.map((s) => <option key={s}>{s}</option>)}</select></Field></div><div className="mt-3 flex flex-wrap gap-2">{([["monitoring", "Monitoramento"], ["alarm", "Alarme"], ["intercom", "Interfonia"], ["network", "Rede / rack"], ["maintenance", "Adicionar manutenção"]] as const).map(([key, label]) => <button type="button" key={key} onClick={() => updateBriefing({ [key]: !briefing[key] })} className={`chip ${briefing[key] ? "!border-signal/50 !text-signal bg-signal/10" : ""}`}>{briefing[key] ? "✓ " : "+ "}{label}</button>)}</div><div className="mt-4 grid gap-3 sm:grid-cols-2"><Field label="Prioridade"><select className="field" value={briefing.priority} onChange={(e) => updateBriefing({ priority: e.target.value as Briefing["priority"] })}>{PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></Field><Field label="Informações adicionais"><textarea className="field min-h-[75px]" value={rawNotes} onChange={(e) => { setRawNotes(e.target.value); invalidate(); }} placeholder="Descrição da necessidade do cliente"/></Field></div></>}</section>
       <section className="card p-4"><label className="flex cursor-pointer items-start gap-3"><input type="checkbox" className="mt-1 accent-cyan-400" checked={wantsContract} onChange={(e) => setWantsContract(e.target.checked)}/><span><span className="flex items-center gap-2 font-display text-[14px] font-semibold text-white"><FileCheck2 size={16} className="text-signal"/> Elaborar contrato após salvar (opcional)</span><span className="mt-1 block text-[11px] leading-relaxed text-steel">Marque se o cliente deseja formalizar a proposta em contrato. Você revisará a minuta em uma etapa separada; nada é ativado ou enviado automaticamente.</span></span></label></section>
       {aiEnabled ? <label className="flex items-center gap-2 text-[11px] text-steel"><input type="checkbox" checked={polish} onChange={(e) => { setPolish(e.target.checked); invalidate(); }}/> Refinar a redação do escopo com a IA configurada no servidor.</label> : null}
