@@ -9,15 +9,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@types/pdfkit": "^0.17.7",
     "dotenv": "17.3.1",
     "drizzle-orm": "0.45.2",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "lucide-react": "^1.70.0",
     "next": "16.2.6",
-    "pdfkit": "^0.20.2",
     "pg": "8.20.0",
     "react": "19.2.6",
-    "react-dom": "19.2.6",
-    "zod": "^4.6.7"
+    "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.17",

@@ -1,270 +1,189 @@
 @import "tailwindcss";
 
 @theme {
-  /* Identidade oficial Gerencial (gerencialcond.com.br) */
-  --color-ink: #181447;
-  --color-ink-soft: #26215e;
-  --color-ink-deep: #100e30;
-  --color-brand: #fab12a;
-  --color-brand-dark: #8a5c00;
-  --color-brand-soft: #fdf3de;
-  --color-gold: #fab12a;
-  --color-success: #0e4828;
-  --color-success-soft: #e7f0e9;
-  --color-paper: #f6f4ee;
-  --color-line: #e3e0d3;
-  --font-sans: Arial, "Helvetica Neue", Helvetica, ui-sans-serif, system-ui, sans-serif;
-  --font-display: Arial, "Helvetica Neue", Helvetica, ui-sans-serif, system-ui, sans-serif;
+  --color-abyss: #050c18;
+  --color-abyss2: #04121f;
+  --color-navy: #0a192f;
+  --color-navy2: #0d2039;
+  --color-navy3: #123054;
+  --color-line: #1b3a5e;
+  --color-signal: #00e5ff;
+  --color-network: #2f80ff;
+  --color-silver: #c6d2e0;
+  --color-steel: #7d93ad;
+  --color-amber: #ffb020;
+  --color-alarm: #ff3b5c;
+  --color-armed: #35e39a;
+  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-html {
-  -webkit-text-size-adjust: 100%;
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background-color: #050c18;
+    color: #c6d2e0;
+    font-family: var(--font-sans);
+  }
+  ::selection {
+    background: rgba(0, 229, 255, 0.28);
+    color: #fff;
+  }
+  input,
+  textarea,
+  select {
+    font-family: var(--font-sans);
+  }
 }
 
-body {
-  font-family: var(--font-sans);
-  background-color: var(--color-paper);
-  color: #23233a;
+@layer components {
+  .label-mono {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #7d93ad;
+  }
+  .card {
+    border: 1px solid rgba(27, 58, 94, 0.75);
+    background: linear-gradient(180deg, rgba(13, 32, 57, 0.82), rgba(5, 12, 24, 0.9));
+    border-radius: 14px;
+  }
+  .field {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid rgba(27, 58, 94, 0.9);
+    background: rgba(4, 18, 31, 0.85);
+    padding: 8px 10px;
+    font-size: 13px;
+    color: #e8eff7;
+    outline: none;
+  }
+  .field:focus {
+    border-color: rgba(0, 229, 255, 0.7);
+    box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.12);
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 9px;
+    border: 1px solid rgba(27, 58, 94, 0.9);
+    background: rgba(13, 32, 57, 0.7);
+    padding: 9px 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: #e4eaf2;
+    transition: all 0.16s ease;
+    cursor: pointer;
+  }
+  .btn:hover {
+    border-color: rgba(0, 229, 255, 0.55);
+    color: #fff;
+    background: rgba(18, 48, 84, 0.85);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    border-color: transparent;
+    background: linear-gradient(135deg, #00e5ff, #2f80ff);
+    color: #04121f;
+    font-weight: 600;
+    box-shadow: 0 8px 24px -12px rgba(0, 229, 255, 0.65);
+  }
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #4df0ff, #4f94ff);
+    color: #04121f;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(27, 58, 94, 0.9);
+    padding: 3px 9px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #9fb2c7;
+  }
 }
 
-.font-display {
-  font-family: var(--font-display);
-  font-weight: 800;
-  letter-spacing: -0.01em;
+.scroll-thin::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
 }
-
-.label {
-  font-size: 0.625rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #6b6b7d;
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #1b3a5e;
+  border-radius: 999px;
 }
-
-.field {
-  width: 100%;
-  border-radius: 0.6rem;
-  border: 1px solid var(--color-line);
-  background: #ffffff;
-  padding: 0.55rem 0.7rem;
-  font-size: 0.875rem;
-  color: var(--color-ink);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
-}
-
-.field:focus {
-  outline: none;
-  border-color: var(--color-ink);
-  box-shadow: 0 0 0 3px rgba(250, 177, 42, 0.35);
-}
-
-.field::placeholder {
-  color: #9a9aa8;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  border-radius: 0.6rem;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  padding: 0.55rem 0.95rem;
-  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
-  cursor: pointer;
-  border: 1px solid transparent;
-}
-
-.btn:active {
-  transform: translateY(1px);
-}
-
-.btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background: var(--color-ink);
-  color: #fff;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-ink-soft);
-}
-
-.btn-brand {
-  background: var(--color-brand);
-  color: var(--color-ink-deep);
-}
-
-.btn-brand:hover:not(:disabled) {
-  background: #ffc14d;
-}
-
-.btn-ghost {
-  background: #fff;
-  border-color: var(--color-line);
-  color: var(--color-ink);
-}
-
-.btn-ghost:hover:not(:disabled) {
-  border-color: var(--color-brand);
-  background: #fffdf6;
-}
-
-.card {
-  background: #fff;
-  border: 1px solid var(--color-line);
-  border-radius: 1rem;
-  box-shadow: 0 1px 2px rgba(24, 20, 71, 0.05), 0 12px 30px -24px rgba(24, 20, 71, 0.35);
-}
-
-/* ---------------- Documento (Mapa de Cotação) ---------------- */
-
-.doc-sheet {
-  background: #fff;
-  color: #23233a;
-  width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 0 0 26px;
-  border-radius: 4px;
-  overflow: hidden;
-  box-shadow: 0 30px 80px -50px rgba(24, 20, 71, 0.55), 0 0 0 1px rgba(24, 20, 71, 0.08);
-  font-size: 11.5px;
-  line-height: 1.45;
-}
-
-.doc-band {
-  background: var(--color-ink);
-  color: #fff;
-  padding: 22px 34px 18px;
-}
-
-.doc-rule {
-  height: 5px;
-  background: linear-gradient(90deg, var(--color-brand) 0%, var(--color-brand) 30%, #ffd47e 50%, var(--color-brand) 70%, #c77f0a 100%);
-}
-
-.doc-body {
-  padding: 0 34px;
-}
-
-.doc-section-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 18px 0 8px;
-  padding-bottom: 5px;
-  border-bottom: 1px solid var(--color-line);
-}
-
-.doc-section-title span:first-child {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--color-ink);
-}
-
-.doc-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 10.5px;
-}
-
-.doc-table th {
-  background: var(--color-ink);
-  color: #fff;
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-weight: 700;
-  padding: 6px 7px;
-  text-align: left;
-  vertical-align: middle;
-}
-
-.doc-table td {
-  padding: 6px 7px;
-  border-bottom: 1px solid #e9e6d9;
-  vertical-align: top;
-}
-
-.doc-table tbody tr:nth-child(even) td {
-  background: #fbf9f2;
-}
-
-.doc-table .num {
-  text-align: right;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.doc-best-cell {
-  background: #e7f0e9 !important;
-  color: var(--color-success);
-  font-weight: 800;
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 @media print {
-  @page {
-    size: A4;
-    margin: 10mm;
-  }
-
-  html,
   body {
     background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
-
   .no-print {
     display: none !important;
   }
-
-  .doc-sheet {
-    box-shadow: none;
-    border-radius: 0;
-    max-width: none;
-    width: 100%;
-    padding: 0 0 10px;
-    font-size: 10px;
-  }
-
-  .doc-band {
-    padding: 14px 4px 12px;
-  }
-
-  .doc-body {
-    padding: 0 4px;
-  }
-
-  .doc-table {
-    font-size: 9px;
-  }
-
-  .print-page {
+  .print-area {
+    position: static !important;
+    margin: 0 !important;
     padding: 0 !important;
+    box-shadow: none !important;
+    width: 210mm !important;
+    overflow: visible !important;
+    border: 0 !important;
+    background: #fff !important;
+    border-radius: 0 !important;
+  }
+  .print-area > div {
+    width: 210mm !important;
+    margin: 0 !important;
+  }
+  .cip-doc {
+    page-break-after: auto;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    width: 210mm !important;
+    min-height: 0 !important;
+  }
+  .cip-sec,
+  .cip-table tr,
+  .cip-totals,
+  .cip-terms,
+  .cip-sign,
+  .cip-strip {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .cip-table thead {
+    display: table-header-group;
+  }
+  /* Rodapé profissional repetido em todas as folhas impressas. */
+  .cip-foot {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 210mm !important;
     margin: 0 !important;
     background: #fff !important;
   }
-
-  .dashboard-print {
-    max-width: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
-  .dashboard-print .card {
-    box-shadow: none !important;
-    break-inside: avoid;
-  }
-
-  * {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+  @page {
+    size: A4;
+    margin: 10mm 0 17mm 0;
   }
 }

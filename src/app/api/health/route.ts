@@ -1,13 +1,12 @@
-import { db } from "@/db";
-import { sql } from "drizzle-orm";
+import { getDatabaseDiagnostics } from "@/lib/database-diagnostics";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET() {
-  try {
-    await db.execute(sql`select 1`);
-    return Response.json({ ok: true });
-  } catch {
-    return Response.json({ ok: false }, { status: 500 });
-  }
+  const diagnostics = await getDatabaseDiagnostics();
+  return Response.json(diagnostics, {
+    status: diagnostics.ok ? 200 : 503,
+    headers: { "Cache-Control": "no-store, max-age=0", "X-Content-Type-Options": "nosniff" },
+  });
 }

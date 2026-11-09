@@ -1,12 +1,20 @@
 import type { NextConfig } from "next";
 
+const publishingFiles = [
+  "./src/**/*.{ts,tsx,css,svg,json,md,txt}",
+  "./public/*.{svg,sql,png,jpg,jpeg,webp,ico,txt}",
+  "./drizzle/**/*.{sql,json}",
+  "./.gitignore", "./.env.example", "./README.md",
+  "./package.json", "./package-lock.json", "./next-env.d.ts",
+  "./next.config.ts", "./tsconfig.json", "./postcss.config.mjs",
+  "./eslint.config.mjs", "./drizzle.config.ts",
+];
+
 const nextConfig: NextConfig = {
-  // O pdfkit é tratado como pacote externo e os arquivos de métricas das fontes
-  // padrão (AFM) precisam acompanhar a função na publicação.
-  serverExternalPackages: ["pdfkit"],
-  outputFileTracingIncludes: {
-    "/api/quotations/[id]/pdf": ["./node_modules/pdfkit/js/data/*.afm"],
-    "/api/indicadores/pdf": ["./node_modules/pdfkit/js/data/*.afm"],
+  // Make only publishable source/assets available to the ZIP endpoint in production.
+  outputFileTracingIncludes: { "/api/publicacao": publishingFiles },
+  outputFileTracingExcludes: {
+    "/api/publicacao": ["./.env", "./.env.local", "./.env.production", "./.env.development", "./public/downloads/**/*"],
   },
 };
 
