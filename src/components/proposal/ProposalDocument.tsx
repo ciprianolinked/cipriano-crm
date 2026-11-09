@@ -128,60 +128,6 @@ function ItemsTable({ items }: { items: ProposalItem[] }) {
   );
 }
 
-function ConditionsBlock({
-  section,
-  proposal,
-  maintenance,
-}: {
-  section: ProposalSection;
-  proposal: DocData;
-  maintenance: boolean;
-}) {
-  const intro: string[] = [];
-  const rows: [string, string][] = [];
-  for (const raw of section.body.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line) continue;
-    const isBullet = /^[•\-–]\s*/.test(line);
-    const clean = line.replace(/^[•\-–]\s*/, "").trim();
-    const separator = clean.indexOf(":");
-    if (isBullet && separator > 0) {
-      rows.push([clean.slice(0, separator).trim(), clean.slice(separator + 1).trim()]);
-    } else if (isBullet) {
-      rows.push(["Condição", clean]);
-    } else {
-      intro.push(clean);
-    }
-  }
-  if (!rows.length) {
-    const payment = intro.length ? intro.join(" ") : proposal.paymentTerms || "A combinar";
-    intro.length = 0;
-    rows.push(
-      ["Pagamento", payment],
-      [maintenance ? "Serviços recorrentes" : "Execução", proposal.deliveryTime || "A combinar"],
-      ["Garantia", proposal.warranty || "A combinar"],
-      ["Validade", `${proposal.validityDays} dias corridos a partir da emissão`],
-    );
-  }
-  return (
-    <>
-      {intro.map((line, i) => (
-        <p className="cip-p" key={i}>
-          {line}
-        </p>
-      ))}
-      <div className="cip-terms" style={{ marginTop: 6 }}>
-        {rows.map(([label, value], i) => (
-          <div className="cip-term-row" key={i}>
-            <b>{label}</b>
-            <span>{value}</span>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}
-
 export function ProposalDocument({ proposal, settings }: { proposal: DocData; settings: DocSettings }) {
   const totals = calcTotals(proposal.items, proposal.discountPct);
   const maintenance = isMaintenanceProposal(proposal.briefing);
@@ -265,13 +211,32 @@ export function ProposalDocument({ proposal, settings }: { proposal: DocData; se
                   </tbody>
                 </table>
               </>
-            ) : section.kind === "terms" ? (
-              <ConditionsBlock section={section} proposal={proposal} maintenance={maintenance} />
             ) : (
               <Body text={section.body} />
             )}
 
             {section.kind === "items" ? <ItemsTable items={proposal.items} /> : null}
+
+            {section.kind === "terms" ? (
+              <div className="cip-terms" style={{ marginTop: 6 }}>
+                <div className="cip-term-row">
+                  <b>Pagamento</b>
+                  <span>{proposal.paymentTerms || "A combinar"}</span>
+                </div>
+                <div className="cip-term-row">
+                  <b>Execução</b>
+                  <span>{proposal.deliveryTime || "A combinar"}</span>
+                </div>
+                <div className="cip-term-row">
+                  <b>Garantia</b>
+                  <span>{proposal.warranty || "A combinar"}</span>
+                </div>
+                <div className="cip-term-row">
+                  <b>Validade</b>
+                  <span>{proposal.validityDays} dias corridos a partir da emissão</span>
+                </div>
+              </div>
+            ) : null}
 
             {section.kind === "totals" ? (
               <>

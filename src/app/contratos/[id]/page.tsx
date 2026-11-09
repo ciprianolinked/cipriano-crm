@@ -24,10 +24,5 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   });
   if (!loaded.ok) return loaded.recovery;
   const { row, observations, settings, revisions, derived } = loaded.data;
-  return <ContractEditor initial={{ ...derived, contractText: row.contractText }} observations={observations} revisions={revisions.map((r) => ({ id: r.id, revision: r.revision, body: r.body, note: r.note, createdAt: r.createdAt.toISOString() }))} aiEnabled={Boolean(process.env.OPENAI_API_KEY)} settings={{
-        companyName: settings.companyName, legalName: settings.legalName, tagline: settings.tagline,
-        director: settings.director, role: settings.role, phone: settings.phone, landline: settings.landline,
-        email: settings.email, site: settings.site, address: settings.address, cnpj: settings.cnpj,
-        crea: settings.crea, hours: settings.hours,
-      }} />;
+  return <ContractEditor initial={{ ...derived, contractText: row.contractText }} observations={observations} revisions={revisions.map((r) => ({ id: r.id, revision: r.revision, body: r.body, note: r.note, createdAt: r.createdAt.toISOString() }))} aiEnabled={Boolean(process.env.OPENAI_API_KEY)} settings={settings} />;
 }

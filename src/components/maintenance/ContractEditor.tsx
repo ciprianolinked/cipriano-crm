@@ -8,13 +8,11 @@ import { brl, fmtDate } from "@/lib/brand";
 import { formatPct, type DerivedContract } from "@/lib/maintenance";
 import { calculateIndex, contractualWindow, formatIndexPct, INDEXES, isOfficialIndex, parseManualPct, type IndexObservation } from "@/lib/indices";
 import { IndexComparisonPanel } from "@/components/maintenance/IndexComparison";
+import type { PdfSettings } from "@/lib/pdf-documents";
 
 export type ContractRevision = { id: string; revision: number; body: string; note: string; createdAt: string };
 type Contract = DerivedContract & { contractText: string };
-type Settings = {
-  companyName: string; legalName: string; tagline: string; director: string; role: string;
-  phone: string; landline: string; email: string; site: string; address: string; cnpj: string; crea: string; hours: string;
-};
+type Settings = PdfSettings;
 
 export function ContractEditor({ initial, observations, revisions, aiEnabled, settings }: { initial: Contract; observations: IndexObservation[]; revisions: ContractRevision[]; aiEnabled: boolean; settings: Settings }) {
   const router = useRouter();
@@ -100,7 +98,7 @@ export function ContractEditor({ initial, observations, revisions, aiEnabled, se
       const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
       pdfKit.renderContractPdf(pdf, {
         text,
-        title: maintenance ? "Contrato de manutenção mensal" : "Contrato de fornecimento e/ou serviços",
+        title: maintenance ? "Contrato de manutencao mensal" : "Contrato de fornecimento e/ou servicos",
         reference: contract.proposalNumber || contract.title,
         clientName: contract.clientName,
         revision: contract.documentRevision,

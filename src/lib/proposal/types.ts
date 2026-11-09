@@ -44,10 +44,47 @@ export type MaintenancePlan = {
   indexName: string;
 };
 
+export type CompetitorFile = {
+  name: string;
+  type: string;
+  size: number;
+  base64: string;
+};
+
+export type CompetitorDetectedItem = {
+  desc: string;
+  qty?: number;
+  price?: number;
+  note?: string;
+};
+
+export type CompetitorAnalysis = {
+  competitorName: string;
+  detectedTotal: number;
+  detectedMonthly?: number;
+  detectedPaymentTerms?: string;
+  detectedWarranty?: string;
+  detectedSummary: string;
+  detectedItems: CompetitorDetectedItem[];
+  weaknesses: string[];
+  ciprianoStrategy: string;
+  ciprianoRecommendedTotal: number;
+  savingsVsCompetitor: {
+    diff: number;
+    pct: number;
+  };
+  talkingPoints: string[];
+  recommendedBriefing?: Partial<Briefing>;
+  recommendedDiscountPct?: number;
+  fileCount: number;
+  analyzedAt: string;
+};
+
 export type Briefing = {
   purpose?: "projeto" | "manutencao_mensal";
   maintenancePlan?: MaintenancePlan;
   wantsContract?: boolean;
+  competitorAnalysis?: CompetitorAnalysis;
   segment: string;
   cameras: number;
   doors: number;

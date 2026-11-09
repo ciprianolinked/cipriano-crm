@@ -1,6 +1,5 @@
 import {
   boolean,
-  customType,
   integer,
   jsonb,
   pgTable,
@@ -10,10 +9,6 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { ProposalItem, ProposalSection } from "@/lib/proposal/types";
-import type { ReferenceAnalysis } from "@/lib/references";
-
-/** bytea do PostgreSQL; o driver devolve Buffer sem conversão. */
-const bytea = customType<{ data: Buffer; driverParam: Buffer }>({ dataType: () => "bytea" });
 
 export const clients = pgTable("clients", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -164,22 +159,6 @@ export const maintenanceDocumentRevisions = pgTable("maintenance_document_revisi
   revision: integer("revision").notNull(),
   body: text("body").notNull(),
   note: text("note").notNull().default(""),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
-/**
- * Proposta de concorrente enviada como referência de precificação.
- * Os bytes ficam no PostgreSQL (bytea) para persistirem entre deploys da Vercel.
- */
-export const referenceFiles = pgTable("reference_files", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  fileName: text("file_name").notNull(),
-  mimeType: text("mime_type").notNull(),
-  sizeBytes: integer("size_bytes").notNull(),
-  data: bytea("data").notNull(),
-  extractedText: text("extracted_text"),
-  analysis: jsonb("analysis").$type<ReferenceAnalysis>(),
-  note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
