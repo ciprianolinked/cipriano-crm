@@ -1,320 +1,385 @@
 import Link from "next/link";
-import { brl, fmtDate, fmtDateTime } from "@/lib/brand";
-import { dashboardStats, getSettings } from "@/lib/data";
-import { FollowUps, type FollowUpItem } from "@/components/crm/FollowUps";
-import { STAGES } from "@/lib/proposal/types";
-import { loadDatabasePage } from "@/components/system/load-database-page";
+import type { ReactNode } from "react";
+import { AppShell } from "@/components/AppShell";
+import { QuotationsList, type QuotationListItem } from "@/components/QuotationsList";
+import { computeMetrics, formatCompactCurrency, formatCurrency, formatDateBR } from "@/lib/quotation";
+import { listCondominiums, listQuotations } from "@/lib/server/quotations";
+import { getAiConfig } from "@/lib/ai";
+import type { CondominiumRecord, QuotationRecord } from "@/lib/types";
+import {
+  ArrowRightIcon,
+  BuildingIcon,
+  CheckIcon,
+  FileIcon,
+  SparklesIcon,
+  TrendIcon,
+  UploadIcon,
+} from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 
-const PALETTE = [
-  { name: "Navy profundo", hex: "#0A192F" },
-  { name: "Ciano sinal", hex: "#00E5FF" },
-  { name: "Azul rede", hex: "#2F80FF" },
-  { name: "Prata", hex: "#C6D2E0" },
-  { name: "Âmbar cerca", hex: "#FFB020" },
-];
+export default async function HomePage() {
+  let records: QuotationRecord[] = [];
+  let condominiums: CondominiumRecord[] = [];
+  let dbError = false;
+  let aiConnected = false;
 
-export default async function DashboardPage() {
-  const loaded = await loadDatabasePage(async () => {
-    const [stats, settings] = await Promise.all([dashboardStats(), getSettings()]);
-    return { stats, settings };
-  });
-  if (!loaded.ok) return loaded.recovery;
-  const { stats, settings } = loaded.data;
-  const followItems: FollowUpItem[] = stats.followUps.map((f) => {
-    const proposal = stats.rows.find((p) => p.id === f.proposalId);
+  try {
+    records = await listQuotations();
+    condominiums = await listCondominiums();
+  } catch {
+    dbError = true;
+  }
+
+  try {
+    aiConnected = (await getAiConfig()).provider !== "none";
+  } catch {
+    aiConnected = false;
+  }
+
+  const items: QuotationListItem[] = records.map((record) => {
+    const metrics = computeMetrics(record);
     return {
-      id: f.id,
-      proposalId: f.proposalId,
-      content: f.content,
-      dueAt: f.dueAt ? f.dueAt.toISOString() : null,
-      clientName: proposal?.clientName ?? "Cliente",
-      number: proposal?.number ?? "",
+      id: record.id,
+      protocol: record.protocol,
+      condominium: record.condominium || "Condomínio não informado",
+      service: record.service,
+      category: record.category,
+      kind: record.kind,
+      analysisDate: record.analysisDate,
+      status: record.status,
+      supplierCount: metrics.supplierCount,
+      itemCount: metrics.itemCount,
+      bestName: metrics.best?.supplier.name ?? null,
+      bestTotal: metrics.best?.total ?? null,
+      savings: metrics.savings,
     };
   });
-  const recent = [...stats.rows].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5);
-  const expiring = stats.open.filter(
-    (p) => new Date(p.issuedAt).getTime() + p.validityDays * 86_400_000 < Date.now(),
-  );
+
+  const totalSavings = items.reduce((total, item) => total + item.savings, 0);
+  const inAnalysis = records.filter((record) => record.status === "em_analise").length;
+  const completed = records.filter((record) => record.status === "concluido").length;
+  const latest = records[0];
+  const condominiumCounts = new Map<string, number>();
+  for (const record of records) {
+    if (!record.condominium) continue;
+    condominiumCounts.set(record.condominium, (condominiumCounts.get(record.condominium) ?? 0) + 1);
+  }
 
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-5 lg:px-7 lg:py-7">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line/50 pb-4">
-        <div>
-          <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-signal">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-armed" /> Central comercial
-          </div>
-          <h1 className="mt-2 font-display text-[clamp(1.6rem,3vw,2.2rem)] font-semibold leading-tight text-white">
-            Propostas e CRM da Cipriano Tech &amp; Security
-          </h1>
-          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-steel">
-            Timbrado oficial, três formatos de proposta, geração assistida por IA, PDF em A4 e controle de funil com
-            lembretes de follow-up. {settings.hours}.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/propostas/nova" className="btn btn-primary">
-            Gerar proposta em 60s
-          </Link>
-          <Link href="/crm" className="btn">
-            Abrir CRM
-          </Link>
-        </div>
-      </header>
-
-      <section className="mt-4 grid grid-cols-2 gap-2.5 lg:grid-cols-5">
-        <Kpi label="Pipeline aberto" value={brl(stats.pipelineCents / 100)} hint={`${stats.open.length} propostas ativas`} accent />
-        <Kpi label="Ganho acumulado" value={brl(stats.wonCents / 100)} hint={`${stats.won.length} contratos fechados`} />
-        <Kpi label="Taxa de conversão" value={`${stats.winRate}%`} hint={`${stats.closedCount} negócios encerrados`} />
-        <Kpi label="Ticket médio" value={brl(stats.ticketCents / 100)} hint={`${stats.rows.length} documentos emitidos`} />
-        <Kpi
-          label="Follow-ups atrasados"
-          value={String(stats.overdue.length)}
-          hint={`${stats.stale.length} propostas sem movimento há 5+ dias`}
-          danger={stats.overdue.length > 0}
-        />
-      </section>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-4">
-          <section className="card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="label-mono text-signal">Foco de hoje</div>
-                <h2 className="font-display text-[15px] font-semibold text-white">Onde o dinheiro está parado</h2>
+    <AppShell>
+      <main className="mx-auto max-w-[1400px] px-4 pb-16 pt-5 sm:px-6">
+        <section className="relative overflow-hidden rounded-2xl bg-ink text-white shadow-[0_30px_60px_-40px_rgba(24,20,71,0.8)]">
+          <div
+            className="pointer-events-none absolute inset-0 opacity-25"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 82% 18%, rgba(250,177,42,0.55) 0, transparent 42%), radial-gradient(circle at 12% 90%, rgba(250,177,42,0.25) 0, transparent 38%)",
+            }}
+          />
+          <div className="relative grid gap-6 px-5 py-7 sm:px-8 sm:py-9 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+            <div>
+              <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[9.5px] font-bold uppercase tracking-[0.18em] text-brand">
+                <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+                Governança condominial · cotações
+              </p>
+              <h1 className="font-display mt-3 max-w-[560px] text-[30px] leading-[1.08] sm:text-[40px]">
+                Cada decisão do condomínio começa com um mapa de cotação claro.
+              </h1>
+              <p className="mt-2.5 max-w-[540px] text-[13px] leading-relaxed text-white/70 sm:text-[14px]">
+                Envie as propostas em PDF ou imagem, deixe a IA gratuita montar o comparativo e mantenha o padrão
+                Gerencial de análise — com campos editáveis para a realidade de cada condomínio.
+              </p>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <Link href="/mapas/novo" className="btn btn-brand">
+                  <SparklesIcon className="h-4 w-4" />
+                  Criar mapa com IA
+                </Link>
+                {!aiConnected ? (
+                  <Link
+                    href="/configuracoes"
+                    className="btn border-white/20 bg-white/10 text-white hover:bg-white/20"
+                  >
+                    Ativar IA gratuita
+                    <ArrowRightIcon className="h-3.5 w-3.5" />
+                  </Link>
+                ) : (
+                  <Link
+                    href="/#mapas"
+                    className="btn border-white/20 bg-white/10 text-white hover:bg-white/20"
+                  >
+                    Ver mapas de cotação
+                    <ArrowRightIcon className="h-3.5 w-3.5" />
+                  </Link>
+                )}
               </div>
-              <Link href="/crm" className="btn py-1 text-[11px]">
-                ver funil
-              </Link>
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              <FocusCard
-                title="Lembretes vencidos"
-                items={stats.overdue.map((f) => {
-                  const p = stats.rows.find((x) => x.id === f.proposalId);
-                  return `${p?.clientName ?? "Cliente"} · ${fmtDate(f.dueAt)}`;
-                })}
-                tone="danger"
-              />
-              <FocusCard
-                title="Validade vencida"
-                items={expiring.map((p) => `${p.clientName} · ${p.validityDays} dias`)}
-                tone="warn"
-                empty="Nenhuma proposta vencida. Bom controle."
-              />
-              <FocusCard
-                title="Sem movimento (5+ dias)"
-                items={stats.stale.map((p) => `${p.clientName} · ${fmtDate(p.updatedAt)}`)}
-                tone="info"
-                empty="Todas as propostas têm movimento recente."
-              />
-            </div>
-          </section>
-
-          <section className="card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="label-mono">Funil comercial</div>
-                <h2 className="font-display text-[15px] font-semibold text-white">Distribuição por etapa</h2>
+              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10.5px] text-white/60">
+                <span className="inline-flex items-center gap-1.5">
+                  <CheckIcon className="h-3 w-3 text-brand" />
+                  PDF, JPG e PNG
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <CheckIcon className="h-3 w-3 text-brand" />
+                  Campos do cabeçalho editáveis
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <CheckIcon className="h-3 w-3 text-brand" />
+                  Documento pronto para assinatura
+                </span>
               </div>
-              <span className="font-mono text-[10px] text-steel">arraste os cards no CRM</span>
             </div>
-            <div className="mt-3 space-y-2">
-              {STAGES.map((stage) => {
-                const rows = stats.rows.filter((p) => p.status === stage.id);
-                const value = rows.reduce((a, p) => a + p.totalCents, 0);
-                const max = Math.max(1, ...STAGES.map((s) => stats.rows.filter((p) => p.status === s.id).reduce((a, p) => a + p.totalCents, 0)));
-                return (
-                  <div key={stage.id} className="grid grid-cols-[130px_minmax(0,1fr)_92px] items-center gap-2">
-                    <span className="truncate text-[11.5px] text-silver">{stage.label}</span>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-navy/60">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{ width: `${Math.max(3, (value / max) * 100)}%`, background: stage.accent }}
-                      />
+
+            <div className="rounded-xl border border-brand/30 bg-white/[0.07] p-4 backdrop-blur-sm">
+              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-brand">Último mapa elaborado</p>
+              {latest ? (
+                <>
+                  <p className="mt-1 text-[15px] font-extrabold leading-tight">{latest.condominium}</p>
+                  <p className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-white/60">{latest.service}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="rounded-lg bg-white/10 px-2.5 py-2">
+                      <p className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-white/50">Melhor proposta</p>
+                      <p className="text-[13px] font-extrabold">{formatCurrency(computeMetrics(latest).best?.total ?? null)}</p>
                     </div>
-                    <span className="text-right font-mono text-[10.5px] text-steel">
-                      {rows.length} · {brl(value / 100)}
-                    </span>
+                    <div className="rounded-lg bg-white/10 px-2.5 py-2">
+                      <p className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-white/50">Economia</p>
+                      <p className="text-[13px] font-extrabold text-brand">
+                        {formatCurrency(computeMetrics(latest).savings)}
+                      </p>
+                    </div>
                   </div>
-                );
-              })}
+                  <div className="mt-2 flex items-center justify-between text-[10px] text-white/50">
+                    <span className="font-mono">{latest.protocol}</span>
+                    <span>{formatDateBR(latest.analysisDate)}</span>
+                  </div>
+                  <Link
+                    href={`/mapas/${latest.id}`}
+                    className="mt-3 flex items-center justify-between rounded-lg bg-brand px-3 py-2 text-[11.5px] font-bold text-ink-deep transition hover:bg-[#ffc14d]"
+                  >
+                    Abrir mapa
+                    <ArrowRightIcon className="h-3.5 w-3.5" />
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <p className="mt-2 text-[13px] font-bold leading-snug">
+                    Bem-vindo ao seu painel Gerencial — por aqui começa tudo do zero.
+                  </p>
+                  <ol className="mt-3 space-y-2">
+                    {[
+                      "Ative a IA gratuita em “Configurar IA” (2 minutos).",
+                      "Crie seu primeiro mapa a partir de PDFs ou fotos.",
+                      "Revise, salve e imprima no padrão Gerencial.",
+                    ].map((step, index) => (
+                      <li key={step} className="flex items-start gap-2 text-[11.5px] leading-snug text-white/70">
+                        <span className="grid h-4.5 w-4.5 shrink-0 place-items-center rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-extrabold text-ink-deep">
+                          {index + 1}
+                        </span>
+                        {step}
+                      </li>
+                    ))}
+                  </ol>
+                  <Link
+                    href="/configuracoes"
+                    className="mt-3 flex items-center justify-between rounded-lg bg-brand px-3 py-2 text-[11.5px] font-bold text-ink-deep transition hover:bg-[#ffc14d]"
+                  >
+                    Começar agora: ativar IA gratuita
+                    <ArrowRightIcon className="h-3.5 w-3.5" />
+                  </Link>
+                </>
+              )}
             </div>
-          </section>
+          </div>
+        </section>
 
-          <section className="card overflow-hidden">
-            <div className="flex items-center justify-between p-4 pb-2">
+        {dbError && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] font-semibold text-amber-800">
+            Não foi possível carregar os mapas agora. A estrutura do banco pode estar sendo inicializada — recarregue em
+            instantes.
+          </div>
+        )}
+
+        {!dbError && !aiConnected && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand/40 bg-brand-soft px-4 py-3">
+            <div className="flex items-start gap-2.5">
+              <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ink text-brand">
+                <SparklesIcon className="h-4 w-4" />
+              </span>
               <div>
-                <div className="label-mono">Documentos recentes</div>
-                <h2 className="font-display text-[15px] font-semibold text-white">Últimas propostas</h2>
+                <p className="text-[13px] font-extrabold text-ink">Ative a leitura automática de propostas — é grátis</p>
+                <p className="text-[11.5px] leading-snug text-slate-600">
+                  Com a chave gratuita do Google Gemini, a IA lê PDFs e fotos e monta o mapa sozinha. Sem ela, você
+                  ainda pode colar o texto ou preencher manualmente.
+                </p>
               </div>
-              <Link href="/propostas" className="btn py-1 text-[11px]">
-                todas
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/ajuda/ia" className="btn btn-ghost">
+                Ver passo a passo
+              </Link>
+              <Link href="/configuracoes" className="btn btn-brand">
+                Configurar IA
               </Link>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[620px] text-left text-[12px]">
-                <thead>
-                  <tr className="bg-navy/40 font-mono text-[9px] uppercase tracking-[0.14em] text-steel">
-                    <th className="px-4 py-2">Número</th>
-                    <th className="px-4 py-2">Cliente</th>
-                    <th className="px-4 py-2">Tipo</th>
-                    <th className="px-4 py-2 text-right">Valor</th>
-                    <th className="px-4 py-2">Etapa</th>
-                    <th className="px-4 py-2">Próxima ação</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recent.map((p) => {
-                    const stage = STAGES.find((s) => s.id === p.status);
-                    return (
-                      <tr key={p.id} className="border-t border-line/40 text-silver hover:bg-navy/25">
-                        <td className="px-4 py-2 font-mono text-[10px] text-signal">
-                          <Link href={`/propostas/${p.id}`}>{p.number}</Link>
-                        </td>
-                        <td className="px-4 py-2">
-                          <Link href={`/propostas/${p.id}`} className="hover:text-signal">
-                            {p.clientName}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-2 text-[11px] text-steel">{p.type.replace("_", " & ")}</td>
-                        <td className="px-4 py-2 text-right font-medium">{brl(p.totalCents / 100)}</td>
-                        <td className="px-4 py-2">
-                          <span className="chip" style={{ borderColor: `${stage?.accent}66`, color: stage?.accent }}>
-                            {stage?.label.split(" ")[0]}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-[10.5px] text-steel">{fmtDateTime(p.nextActionAt)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          </div>
+        )}
+
+        <Link href="/indicadores" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand/30 bg-white px-4 py-3 transition hover:border-brand hover:bg-brand-soft/30">
+          <span className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-ink text-brand"><TrendIcon className="h-4.5 w-4.5" /></span><span><strong className="block text-[12.5px] text-ink">Dashboard para assembleia</strong><span className="block text-[11px] text-slate-500">Acompanhe economias, propostas e resultados por condomínio.</span></span></span>
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-dark">Abrir indicadores <ArrowRightIcon className="h-3.5 w-3.5" /></span>
+        </Link>
+
+        <section className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            icon={<FileIcon className="h-4 w-4" />}
+            label="Mapas no portfólio"
+            value={String(records.length)}
+            hint={`${completed} concluído(s) · ${inAnalysis} em análise`}
+          />
+          <StatCard
+            icon={<TrendIcon className="h-4 w-4" />}
+            label="Economia potencial"
+            value={formatCompactCurrency(totalSavings)}
+            hint="Diferença entre propostas completas, não lucro"
+            tone="gold"
+          />
+          <StatCard
+            icon={<BuildingIcon className="h-4 w-4" />}
+            label="Condomínios atendidos"
+            value={String(condominiums.length)}
+            hint="Associações e condomínios com processo ativo"
+          />
+          <StatCard
+            icon={<SparklesIcon className="h-4 w-4" />}
+            label="Leitura com IA"
+            value={aiConnected ? "Ativa" : "A ativar"}
+            hint={aiConnected ? "Gemini gratuito conectado" : "Configure grátis em 2 minutos"}
+            tone="ink"
+          />
+        </section>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_336px]">
+          <QuotationsList items={items} />
+
+          <aside className="space-y-4">
+            <section className="card overflow-hidden">
+              <div className="bg-ink px-4 py-4 text-white">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-ink-deep">
+                  <SparklesIcon className="h-3 w-3" />
+                  Assistente Gerencial · grátis
+                </span>
+                <h2 className="font-display mt-2 text-[20px] leading-tight">Da proposta ao mapa, em segundos.</h2>
+                <p className="mt-1 text-[11.5px] leading-snug text-white/70">
+                  Envie PDFs das cotações ou fotos dos orçamentos. A IA identifica fornecedores, itens, valores e redige
+                  o parecer técnico.
+                </p>
+                <Link href="/mapas/novo" className="btn btn-brand mt-3 w-full">
+                  <UploadIcon className="h-4 w-4" />
+                  Analisar propostas
+                </Link>
+                {!aiConnected && (
+                  <Link
+                    href="/ajuda/ia"
+                    className="mt-2 block text-center text-[11px] font-bold text-brand hover:underline"
+                  >
+                    Como ativar a IA gratuita? Veja o passo a passo →
+                  </Link>
+                )}
+              </div>
+              <ol className="divide-y divide-line">
+                {[
+                  { step: "1", title: "Envie os documentos", text: "PDF, JPG ou PNG — até 6 arquivos por análise." },
+                  { step: "2", title: "Revise o comparativo", text: "Campos editáveis por condomínio e categoria." },
+                  { step: "3", title: "Aprove e arquive", text: "Documento no padrão Gerencial, pronto para PDF." },
+                ].map((entry) => (
+                  <li key={entry.step} className="flex items-start gap-2.5 px-4 py-2.5">
+                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-soft text-[10px] font-extrabold text-brand-dark">
+                      {entry.step}
+                    </span>
+                    <div>
+                      <p className="text-[11.5px] font-bold text-ink">{entry.title}</p>
+                      <p className="text-[10.5px] leading-snug text-slate-500">{entry.text}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+
+            <section className="card" id="condominios">
+              <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+                <div>
+                  <Link href="/condominios" className="text-[13.5px] font-extrabold text-ink hover:underline">Condomínios atendidos</Link>
+                  <p className="text-[10.5px] text-slate-500">Base da governança Gerencial</p>
+                </div>
+                <BuildingIcon className="h-4 w-4 text-slate-400" />
+              </div>
+              <ul className="divide-y divide-line">
+                {condominiums.length === 0 && (
+                  <li className="px-4 py-4 text-[11.5px] text-slate-500">
+                    Nenhum condomínio ainda. O primeiro é cadastrado automaticamente ao salvar seu primeiro mapa.
+                  </li>
+                )}
+                {condominiums.map((condominium) => (
+                  <li key={condominium.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-[12px] font-bold text-ink">{condominium.name}</p>
+                      <p className="truncate text-[10px] text-slate-500">
+                        {condominium.city ?? "Cidade não informada"}
+                        {condominium.manager ? ` · ${condominium.manager}` : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-paper px-2 py-0.5 text-[10px] font-bold text-slate-500">
+                      {condominiumCounts.get(condominium.name) ?? 0} mapa(s)
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="border-t border-line px-4 py-2.5">
+                <Link href="/condominios" className="text-[11px] font-bold text-brand-dark hover:underline">
+                  Gerenciar condomínios e associações →
+                </Link>
+              </div>
+            </section>
+          </aside>
         </div>
 
-        <aside className="space-y-3">
-          <section className="card p-4">
-            <div className="flex items-center justify-between">
-              <div className="label-mono text-signal">Sua agenda de vendas</div>
-              <span className="chip">{stats.followUps.length} abertos</span>
-            </div>
-            <div className="mt-2">
-              <FollowUps items={followItems} compact />
-            </div>
-            <Link href="/crm" className="btn mt-2 w-full py-1 text-[11px]">
-              Gerenciar follow-ups
-            </Link>
-          </section>
-
-          <section className="card p-4">
-            <div className="label-mono">Identidade aplicada</div>
-            <h2 className="font-display text-[15px] font-semibold text-white">Papel timbrado oficial</h2>
-            <p className="mt-1 text-[11.5px] leading-relaxed text-steel">
-              Cabeçalho navy com assinatura completa, filete ciano, tabelas técnicas e rodapé com CREA, CNPJ e contatos.
-            </p>
-            <div className="mt-3 flex overflow-hidden rounded-lg border border-line/60">
-              {PALETTE.map((color) => (
-                <div key={color.hex} className="h-9 flex-1" style={{ background: color.hex }} title={`${color.name} ${color.hex}`} />
-              ))}
-            </div>
-            <div className="mt-2 grid gap-1 font-mono text-[9px] uppercase tracking-[0.12em] text-steel">
-              <span>Space Grotesk · display</span>
-              <span>IBM Plex Sans · texto</span>
-              <span>IBM Plex Mono · dados técnicos</span>
-            </div>
-            <Link href="/configuracoes" className="btn mt-3 w-full py-1 text-[11px]">
-              Editar dados do timbrado
-            </Link>
-          </section>
-
-          <section className="card p-4">
-            <div className="label-mono text-signal">Otimização de tempo</div>
-            <h2 className="font-display text-[15px] font-semibold text-white">O que já está automatizado</h2>
-            <ul className="mt-2 space-y-1.5 text-[11.5px] leading-relaxed text-steel">
-              <li><b className="text-silver">Briefing em 60s:</b> 4 atalhos + leitura de texto livre do WhatsApp.</li>
-              <li><b className="text-silver">Catálogo:</b> item, especificação e preço entram sem redigitar.</li>
-              <li><b className="text-silver">Biblioteca de cláusulas:</b> normas, SLA, LGPD, aterramento e ART prontos.</li>
-              <li><b className="text-silver">Duplicar + editar:</b> proposta nova a partir da anterior em 2 cliques.</li>
-              <li><b className="text-silver">PDF A4:</b> timbrado oficial sem montar documento no Word.</li>
-            </ul>
-          </section>
-
-          <section className="card p-4">
-            <div className="label-mono text-signal">Rotina para não perder feedback</div>
-            <ol className="mt-2 space-y-1.5 text-[11.5px] leading-relaxed text-steel">
-              <li><b className="text-silver">1.</b> Enviou? Mova para “Proposta enviada” — o CRM já agenda D+2.</li>
-              <li><b className="text-silver">2.</b> D+2: confirme recebimento e pergunte quem decide.</li>
-              <li><b className="text-silver">3.</b> D+5: envie um dado novo (cronograma, laudo, ART).</li>
-              <li><b className="text-silver">4.</b> D+10: proponha reunião de ajuste de escopo.</li>
-              <li><b className="text-silver">5.</b> Fechou ou perdeu? Registre o motivo e arquive.</li>
-            </ol>
-          </section>
-        </aside>
-      </div>
-    </div>
+        <p className="mt-6 text-center text-[10.5px] text-slate-400">
+          Gerencial · Governança Condominial — padrão institucional de mapas de cotação. Documentos gerados para apoio à
+          decisão do síndico e do conselho.
+        </p>
+      </main>
+    </AppShell>
   );
 }
 
-function Kpi({
+function StatCard({
+  icon,
   label,
   value,
   hint,
-  accent = false,
-  danger = false,
+  tone = "default",
 }: {
+  icon: ReactNode;
   label: string;
   value: string;
   hint: string;
-  accent?: boolean;
-  danger?: boolean;
+  tone?: "default" | "gold" | "ink";
 }) {
+  const iconStyle =
+    tone === "gold"
+      ? "bg-brand-soft text-brand-dark"
+      : tone === "ink"
+        ? "bg-ink text-brand"
+        : "bg-paper text-ink";
   return (
-    <div className="card p-3">
-      <div className="label-mono">{label}</div>
-      <div
-        className={`mt-1 font-display text-[clamp(1rem,1.6vw,1.35rem)] font-bold leading-tight ${
-          danger ? "text-alarm" : accent ? "text-signal" : "text-white"
-        }`}
-      >
-        {value}
+    <div className="card px-4 py-3.5">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="label !text-[8.5px]">{label}</p>
+          <p className="font-display mt-1 text-[24px] leading-none text-ink">{value}</p>
+        </div>
+        <span className={`grid h-8 w-8 place-items-center rounded-lg ${iconStyle}`}>{icon}</span>
       </div>
-      <div className="mt-0.5 text-[10.5px] leading-snug text-steel">{hint}</div>
-    </div>
-  );
-}
-
-function FocusCard({
-  title,
-  items,
-  tone,
-  empty = "Nada pendente aqui.",
-}: {
-  title: string;
-  items: string[];
-  tone: "danger" | "warn" | "info";
-  empty?: string;
-}) {
-  const color = tone === "danger" ? "#FF3B5C" : tone === "warn" ? "#FFB020" : "#2F80FF";
-  return (
-    <div className="rounded-lg border p-2.5" style={{ borderColor: `${color}55`, background: `${color}0d` }}>
-      <div className="flex items-center justify-between">
-        <span className="text-[11.5px] font-medium text-silver">{title}</span>
-        <span className="font-mono text-[10px]" style={{ color }}>
-          {items.length}
-        </span>
-      </div>
-      <div className="mt-1 space-y-0.5">
-        {items.length === 0 ? <p className="text-[10.5px] text-steel">{empty}</p> : null}
-        {items.slice(0, 3).map((item) => (
-          <p key={item} className="truncate text-[10.5px] text-steel">
-            {item}
-          </p>
-        ))}
-        {items.length > 3 ? <p className="text-[10px] text-steel">+{items.length - 3} outros</p> : null}
-      </div>
+      <p className="mt-1.5 text-[10.5px] leading-snug text-slate-500">{hint}</p>
     </div>
   );
 }

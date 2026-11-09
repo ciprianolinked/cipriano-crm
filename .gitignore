@@ -1,25 +1,20 @@
-node_modules/
-.next/
-out/
-.vercel/
+# Dependências e arquivos gerados
+/node_modules/
+/.next/
+/out/
+/build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Variáveis e credenciais: nunca enviar para o GitHub
 .env
 .env.*
 !.env.example
-*.tsbuildinfo
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.log
-*.zip
 *.pem
 *.key
-*.p12
-*.pfx
-coverage/
-playwright-report/
-test-results/
-public/downloads/
+
+# Artefatos locais
+.vercel/
+*.log
+.DS_Store
+Thumbs.db
