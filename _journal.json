@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793992236974,
+      "tag": "0000_neon_initial",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793996682469,
+      "tag": "0001_optional_proposal_contracts",
+      "breakpoints": true
+    }
+  ]
+}

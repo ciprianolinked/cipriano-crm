@@ -1,0 +1,217 @@
+.a4-document-root {
+  width: 210mm;
+  color: #33465e;
+  font-family: "IBM Plex Sans", "Inter", Arial, sans-serif;
+}
+
+.a4-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.a4-page {
+  box-sizing: border-box;
+  width: 210mm;
+  height: 297mm;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  background: #ffffff;
+  color: #33465e;
+  font-family: "IBM Plex Sans", "Inter", Arial, sans-serif;
+  font-size: 11.2px;
+  line-height: 1.62;
+  box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.8);
+}
+
+.a4-page * { box-sizing: border-box; }
+.a4-header { flex: none; }
+
+.a4-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 20px 44px 16px;
+  overflow: hidden;
+}
+
+.a4-content > [data-pdf-block] { break-inside: auto; }
+.a4-content [data-pdf-split="text"]:not(.cip-mini):not(.cip-terms) { display: flow-root; }
+.a4-content > [data-pdf-block][data-pdf-atomic]:not(.cip-totals):not(.cip-strip):not(.cip-sign):not(.cip-seal) { display: flow-root; }
+.a4-content table { width: 100%; }
+.a4-content tr { break-inside: avoid; }
+.a4-table-continuation {
+  margin: 6px 0 3px;
+  color: #7d93ad;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7.4px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.a4-footer {
+  flex: none;
+  border-top: 2px solid #00e5ff;
+  background: #f8fafc;
+  padding: 9px 44px 11px;
+  color: #5a6e88;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7.4px;
+  line-height: 1.45;
+}
+
+.a4-footer-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+}
+
+.a4-footer-company strong {
+  display: block;
+  color: #0a192f;
+  font-family: "Space Grotesk", "Inter", sans-serif;
+  font-size: 8.6px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-bottom: 2px;
+}
+
+.a4-footer-company span,
+.a4-footer-contact span { display: block; }
+.a4-footer-contact { text-align: right; white-space: nowrap; }
+
+.a4-footer-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid #dce4ee;
+  color: #7d93ad;
+  font-size: 7.2px;
+  letter-spacing: 0.04em;
+}
+
+.a4-footer-page { white-space: nowrap; color: #0a192f; }
+.a4-footer-page strong { font-weight: 700; }
+.a4-footer-notice { margin-top: 3px; color: #7d93ad; font-size: 6.8px; }
+
+.a4-measure {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 210mm;
+  pointer-events: none;
+}
+
+.a4-measure-page .a4-content { flex: 0 0 auto; overflow: visible; }
+.a4-probe { position: absolute; visibility: hidden; pointer-events: none; }
+
+.a4-loading {
+  width: 210mm;
+  height: 297mm;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: #ffffff;
+  color: #5a6e88;
+  font-size: 13px;
+  box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.8);
+}
+
+.a4-loading-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid #dce4ee;
+  border-top-color: #00b8d4;
+  animation: a4-spin 0.9s linear infinite;
+}
+
+@keyframes a4-spin { to { transform: rotate(360deg); } }
+
+.is-paginating .a4-pages { opacity: 0.55; }
+
+.a4-export-host {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  overflow: auto;
+  background: #ffffff;
+}
+
+.a4-export-host .a4-page { margin: 0; box-shadow: none; }
+.a4-print-portal { display: none; }
+.a4-offscreen { position: fixed; left: -10000px; top: 0; width: 210mm; pointer-events: none; }
+.a4-contract-preview { overflow-x: auto; padding: 16px 0; }
+
+.a4-contract-title {
+  margin: 0 0 14px;
+  color: #0a192f;
+  font-family: "Space Grotesk", "Inter", sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.a4-contract-heading {
+  margin: 12px 0 6px;
+  color: #0a192f;
+  font-family: "Space Grotesk", "Inter", sans-serif;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.a4-contract-paragraph {
+  margin: 0 0 8px;
+  color: #33465e;
+  font-size: 10.8px;
+  line-height: 1.65;
+  text-align: justify;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.a4-contract-signature {
+  margin: 14px 0 4px;
+  color: #0a192f;
+  font-size: 10px;
+  white-space: pre-wrap;
+}
+
+@media print {
+  @page { size: A4 portrait; margin: 0; }
+  html, body {
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+  body > * { display: none !important; }
+  body > #a4-print-only {
+    display: block !important;
+    position: static !important;
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  #a4-print-only .a4-page {
+    width: 210mm !important;
+    height: 297mm !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    break-after: page;
+    page-break-after: always;
+    overflow: hidden !important;
+  }
+  #a4-print-only .a4-page:last-child { break-after: auto; page-break-after: auto; }
+  .a4-measure, .a4-loading, .no-print { display: none !important; }
+}

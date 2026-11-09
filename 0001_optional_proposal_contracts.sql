@@ -1,0 +1,2 @@
+ALTER TABLE "maintenance_contracts" ADD COLUMN "contract_kind" text DEFAULT 'manutencao' NOT NULL;--> statement-breakpoint
+ALTER TABLE "maintenance_contracts" ADD COLUMN "contract_value_cents" integer DEFAULT 0 NOT NULL;
