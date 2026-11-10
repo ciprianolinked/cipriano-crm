@@ -9,6 +9,7 @@ import {
   maintenanceDocumentRevisions,
   maintenanceReadjusts,
   proposals,
+  referenceFiles,
 } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
   }
 
   await db.delete(maintenanceDocumentRevisions);
+  const references = await db.delete(referenceFiles).returning({ id: referenceFiles.id });
   const readjusts = await db.delete(maintenanceReadjusts).returning({ id: maintenanceReadjusts.id });
   const contracts = await db.delete(maintenanceContracts).returning({ id: maintenanceContracts.id });
   const acts = await db.delete(activities).returning({ id: activities.id });
@@ -43,6 +45,7 @@ export async function POST(request: Request) {
     ok: true,
     removed: {
       readjusts: readjusts.length,
+      references: references.length,
       contracts: contracts.length,
       activities: acts.length,
       proposals: props.length,

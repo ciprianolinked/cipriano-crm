@@ -155,6 +155,21 @@ CREATE TABLE IF NOT EXISTS public.economic_index_values (
   updated_at timestamptz DEFAULT now() NOT NULL
 );
 
+-- Propostas de concorrente enviadas como referência de precificação (máx. 6).
+-- bytea preserva o arquivo original entre deploys; não guarda dados de clientes do painel.
+CREATE TABLE IF NOT EXISTS public.reference_files (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  file_name text NOT NULL,
+  mime_type text NOT NULL,
+  size_bytes integer NOT NULL,
+  data bytea NOT NULL,
+  extracted_text text,
+  manual_text text,
+  analysis jsonb,
+  note text,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS public.app_settings (
   id text PRIMARY KEY DEFAULT 'default' NOT NULL,
   company_name text DEFAULT 'Cipriano Tech & Security' NOT NULL,
@@ -181,6 +196,8 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
 -- Modalidade de contrato: 'manutencao' é recorrente; 'proposta' é fornecimento/serviço.
 ALTER TABLE public.maintenance_contracts ADD COLUMN IF NOT EXISTS contract_kind text DEFAULT 'manutencao' NOT NULL;
 ALTER TABLE public.maintenance_contracts ADD COLUMN IF NOT EXISTS contract_value_cents integer DEFAULT 0 NOT NULL;
+-- Transcrição manual de propostas de concorrente sem camada de texto.
+ALTER TABLE public.reference_files ADD COLUMN IF NOT EXISTS manual_text text;
 
 -- Complementa instalações antigas. ADD COLUMN IF NOT EXISTS não recria
 -- nem sobrescreve uma coluna existente. Todos os campos novos têm default
@@ -227,7 +244,7 @@ ON CONFLICT (id) DO NOTHING;
 
 COMMIT;
 
--- Confirmação: o resultado deve ser 10 no database selecionado.
+-- Confirmação: o resultado deve ser 11 no database selecionado.
 SELECT count(*) AS tabelas_do_aplicativo, current_database() AS database_atual
 FROM pg_tables
 WHERE schemaname = 'public'
@@ -235,5 +252,5 @@ WHERE schemaname = 'public'
     'clients', 'proposals', 'activities', 'catalog_items',
     'maintenance_contracts', 'maintenance_readjusts',
     'maintenance_document_revisions', 'ipca_history',
-    'economic_index_values', 'app_settings'
+    'economic_index_values', 'reference_files', 'app_settings'
   );

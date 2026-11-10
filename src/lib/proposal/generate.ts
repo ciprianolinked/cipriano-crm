@@ -575,9 +575,7 @@ export function generateProposal(input: {
   const briefing = input.briefing;
   const artIncluded = input.artIncluded ?? input.type === "completa";
   const validityDays = input.validityDays ?? settings.defaultValidityDays;
-  const discountPct =
-    input.discountPct ??
-    (briefing.competitorAnalysis?.recommendedDiscountPct ?? suggestDiscount(briefing, input.type));
+  const discountPct = input.discountPct ?? suggestDiscount(briefing, input.type);
   const deliveryTime = settings.defaultDeliveryTime;
   const warranty = settings.defaultWarranty;
   const items = buildItems(briefing, input.type, artIncluded);

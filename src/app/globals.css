@@ -173,17 +173,23 @@
     display: table-header-group;
   }
   /* Rodapé profissional repetido em todas as folhas impressas. */
+  .cip-body {
+    padding-bottom: 20mm !important;
+  }
   .cip-foot {
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
     width: 210mm !important;
+    height: 15mm !important;
     margin: 0 !important;
+    padding-top: 3mm !important;
     background: #fff !important;
+    font-size: 7.6px !important;
   }
   @page {
     size: A4;
-    margin: 10mm 0 17mm 0;
+    margin: 10mm 0 19mm 0;
   }
 }
