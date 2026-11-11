@@ -1,7 +1,7 @@
 import { brl } from "@/lib/brand";
-import { calcTotals, defaultBriefing } from "@/lib/proposal/catalog";
+import { defaultBriefing } from "@/lib/proposal/catalog";
 import type { GeneratorSettings } from "@/lib/proposal/generate";
-import type { Briefing, ProposalDraft, ProposalItem, ProposalSection, ProposalType } from "@/lib/proposal/types";
+import type { Briefing, ProposalDraft, ProposalItem, ProposalSection, SectionTableRow, ProposalType } from "@/lib/proposal/types";
 import { parseBrl } from "@/lib/references";
 
 export type ScopeId =
@@ -14,54 +14,48 @@ export type ScopeId =
   | "servicos"
   | "outros";
 
-export const SCOPE_DEFINITIONS: {
-  id: ScopeId;
-  name: string;
-  keywords: RegExp[];
-  service: boolean;
-}[] = [
+export const SCOPE_DEFINITIONS: { id: ScopeId; name: string; keywords: RegExp[]; service: boolean }[] = [
   {
     id: "cftv",
     name: "CFTV IP",
     service: false,
-    // "PoE" é especificação comum a vários escopos: não classifica sozinho.
-    keywords: [/c[aâ]mera/, /cftv/, /nvr/, /dvr/, /bullet/, /dome/, /lente/, /gravad/, /v[ií]deo/, /colorvu/, /hd de vigil[aâ]ncia/, /anal[ií]tic/],
+    keywords: [/camera/, /cftv/, /\bnvr\b/, /\bdvr\b/, /bullet/, /dome/, /lente/, /gravad/, /video/, /4k/, /ip6[67]/, /colorvu/, /vigilanc/, /speed ?dome/, /analitic/, /imagem/],
   },
   {
     id: "acesso",
     name: "Controle de Acesso",
     service: false,
-    keywords: [/acesso/, /facial/, /biom[eé]tr/, /fechadura/, /eletro[ií]m[aã]/, /catraca/, /rfid/, /cart[aã]o/, /botoeira/, /controlador/, /interfonia/, /portaria remota/, /torniquete/],
+    keywords: [/acesso/, /facial/, /biometr/, /fechadura/, /eletroim/, /catraca/, /\brfid\b/, /cartao/, /botoeira/, /controlador/, /interfon/, /portaria remota/, /torniquete/, /leitor/, /tag/],
   },
   {
     id: "perimetro",
     name: "Perímetro e Alarme",
     service: false,
-    keywords: [/cerca/, /per[ií]metro/, /haste/, /fio de a[cç]o/, /central de choque/, /sirene/, /alarme/, /sensor/, /ivp/, /cftv.*perimet/],
+    keywords: [/cerca/, /perimetr/, /haste/, /fio de aco/, /choque/, /sirene/, /alarme/, /sensor/, /\bivp\b/, /infravermelho/],
   },
   {
     id: "rede",
     name: "Rede e Infraestrutura",
     service: false,
-    keywords: [/switch/, /rack/, /nobreak/, /cabeamento/, /cat6/, /cat5/, /patch/, /dps/, /aterramento/, /fibra/, /roteador/, /energia/, /quadro/, /vlan/, /servidor/, /storage/, /poe/, /access point/, /wi-?fi/, /link de dados/],
+    keywords: [/switch/, /rack/, /nobreak/, /cabeamento/, /cat ?6/, /cat ?5/, /patch/, /\bdps\b/, /aterramento/, /fibra/, /roteador/, /\bpoe\b/, /quadro/, /vlan/, /storage|servidor/, /eletrocalha/, /conector/],
   },
   {
     id: "monitoramento",
     name: "Monitoramento e NOC",
     service: true,
-    keywords: [/monitoramento/, /noc/, /ronda virtual/, /central de monitoramento/, /24h/, /suporte remoto/, /app cipriano/, /visualiza[cç][aã]o remota/],
+    keywords: [/monitoramento/, /\bnoc\b/, /ronda virtual/, /24 ?h/, /suporte remoto/, /nuvem/, /aplicativo|\bapp\b/],
   },
   {
     id: "manutencao",
     name: "Manutenção Mensal",
     service: true,
-    keywords: [/manuten[cç][aã]o/, /preventiva/, /corretiva/, /visita t[eé]cnica/, /hora t[eé]cnica/, /atendimento mensal/, /contrato de manuten/],
+    keywords: [/manutencao/, /preventiva/, /corretiva/, /visita tecnica/, /hora tecnica/, /contrato mensal/],
   },
   {
     id: "servicos",
     name: "Projeto e Serviços Técnicos",
     service: true,
-    keywords: [/instala[cç][aã]o/, /configura[cç][aã]o/, /comissionamento/, /projeto/, /art\b/, /as[- ]built/, /memorial/, /treinamento/, /laudo/, /m[aã]o de obra/, /configura/, /testes/],
+    keywords: [/instalacao/, /configuracao/, /comissionamento/, /\bprojeto\b/, /\bart\b/, /as.?built/, /memorial/, /treinamento/, /laudo/, /mao de obra/, /frete/, /deslocamento/, /testes?/],
   },
   { id: "outros", name: "Itens Complementares", service: false, keywords: [] },
 ];
@@ -73,6 +67,7 @@ export type ReferenceDocumentInput = {
   manualText: string | null;
   note: string | null;
   pages: number | null;
+  layoutRows: string[][] | null;
 };
 
 export type CompetitorItem = {
@@ -95,14 +90,13 @@ export type CompetitorDocument = {
   fileName: string;
   hasText: boolean;
   usedManualText: boolean;
+  usedLayout: boolean;
   pages: number | null;
-  textLength: number;
   itemCount: number;
   declaredTotal: number | null;
   detectedItemsTotal: number;
   adoptedTotal: number;
-  conditionLines: string[];
-  notes: string[];
+  conditions: string[];
 };
 
 export type CompetitorScope = {
@@ -110,6 +104,7 @@ export type CompetitorScope = {
   name: string;
   items: CompetitorItem[];
   subtotal: number;
+  service: boolean;
 };
 
 export type CompetitorAnalysis = {
@@ -126,307 +121,250 @@ export type CompetitorAnalysis = {
   source: string;
 };
 
-const PRICE_RE = /R\$\s*([\d]{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)/g;
-/**
- * Total geral: o rótulo precisa anteceder o valor no fim da linha.
- * Assim um cabeçalho de tabela ("... Unitário Total") não transforma o
- * primeiro equipamento em total do documento.
- */
-const TOTAL_RE = /(?:^|[\s:–-])(?:total(?:\s+(?:geral|do\s+projeto|da\s+proposta|do\s+or[cç]amento))?|valor\s+total|investimento(?:\s+total)?|valor\s+global|grand\s+total)\b[^\d]{0,14}R?\$?\s*[\d][\d.,]*\s*$/i;
-const CONDITION_RE = /^(pagamento|prazo|validade|garantia|entrega|frete|condi[cç][õo]es|impostos?|observa[cç][õo]es|desconto|parcelamento|forma de pagamento)\b/i;
-const UNIT_RE = /(\d+)\s*(?:x\s*)?(?:unidades?|un\.?|und\.?|unid\.?|p[cç]\.?|pe[cç]as?|c[aâ]meras?|cams?|portas?|pontos?|metros?|m\b|vb|conjuntos?|kits?|licen[cç]as?|meses|m[eê]s|mensal)/i;
-const QTY_FIELD_RE = /(?:qtd|qtde|quant\.?|quantidade)\s*[:.]?\s*(\d+)/i;
-const SPEC_RE = /\b(?:DS-[A-Z0-9-]+|4K|8TB|4TB|2TB|IP6[67]|IK10|PoE|CAT6|CAT5E?|NVR|DVR|WDR|RAID\s?1|H\.265\+?|Wi-?Fi|RFID|TCP\/IP|ONVIF|12\s?V|127\/220\s?V|\d+\s?TB)\b/gi;
+const MONEY = /R\$\s*-?\s*([\d]{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)/g;
+const TOTAL_LABEL = /\b(total|valor total|total geral|investimento|valor global|total do projeto|total da proposta|soma)\b/i;
+const IGNORE_LABEL = /\b(subtotal|desconto|frete|cotacao|or[cç]amento n|cnpj|cpf|telefone|e-?mail|validade|pagamento|garantia|prazo|obs|condi[cç][õo]es|data|cliente|endere[cç]o)\b/i;
+const UNIT_CELL = /^(un|und|unid|und\.|pç|pc|peca|peça|vb|m|mt|m²|m2|kg|kit|cj|conj|mes|mês|porta|portas|ponto|pontos|camera|câmera|cam|licen[çc]a|hora|h)$/i;
+const SPEC = /\b(?:DS-?[A-Z0-9-]{4,}|[A-Z]{2,}[A-Z0-9]*-[A-Z0-9-]{3,}|4K|8TB|6TB|4TB|2TB|IP6[67]|IK10|PoE|CAT ?6|CAT ?5E?|NVR|DVR|WDR|RAID ?1|H\.?265\+?|ONVIF|RFID|TCP\/IP|12 ?V|127\/220 ?V)\b/gi;
 
-function norm(value: string) {
-  return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
+const normalize = (value: string) =>
+  value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-function classifyScope(description: string, fileName: string): ScopeId {
-  let best: ScopeId = "outros";
-  let bestScore = 0;
-  for (const def of SCOPE_DEFINITIONS) {
-    let score = 0;
-    for (const keyword of def.keywords) {
-      // A descrição do item vale mais que o nome do arquivo na classificação.
-      const probe = new RegExp(keyword.source, "i");
-      if (probe.test(description)) score += 2;
-      else if (probe.test(fileName)) score += 1;
-    }
-    if (score > bestScore) {
-      bestScore = score;
-      best = def.id;
+/* -------------------------------------------------------------------------- */
+/* Leitura de linhas e células                                                */
+/* -------------------------------------------------------------------------- */
+
+function moneyValues(value: string): number[] {
+  const out: number[] = [];
+  for (const match of value.matchAll(MONEY)) {
+    const number = parseBrl(match[1]);
+    if (number > 0) out.push(number);
+  }
+  // Números no formato brasileiro sem "R$" (tabelas com coluna de valores).
+  if (!out.length) {
+    const bare = value.match(/(?:^|\s)(\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2})(?=\s|$)/g);
+    for (const item of bare ?? []) {
+      const number = parseBrl(item.trim());
+      if (number > 0) out.push(number);
     }
   }
-  if (best === "outros") {
-    // Nome do arquivo é uma dica útil quando a linha é genérica.
-    const fileHint = norm(fileName);
-    if (/camera|cftv|nvr|video/.test(fileHint)) return "cftv";
-    if (/acesso|facial|biometr|catraca|rfid/.test(fileHint)) return "acesso";
-    if (/cerca|alarme|perimetr/.test(fileHint)) return "perimetro";
-    if (/rede|infraestrutura|switch/.test(fileHint)) return "rede";
-    if (/monitoramento|noc/.test(fileHint)) return "monitoramento";
-    if (/manutencao/.test(fileHint)) return "manutencao";
+  return out;
+}
+
+function headerish(cells: string[]) {
+  const joined = cells.join(" ");
+  return /descri[cç][aã]o|produto|equipamento|quantidade|qtd|unit[aá]rio|valor total|vl\.? unit|vl\.? total|item\b/i.test(joined);
+}
+
+function classifyScope(description: string): ScopeId {
+  // Compara sem acentos e sem diferença de caixa: "Câmera" e "CAMERA" caem no mesmo escopo.
+  const haystack = normalize(description);
+  let best: ScopeId = "outros";
+  let score = 0;
+  for (const definition of SCOPE_DEFINITIONS) {
+    let current = 0;
+    for (const keyword of definition.keywords) {
+      const probe = new RegExp(keyword.source, "i");
+      if (probe.test(haystack)) current += 1;
+    }
+    if (current > score) {
+      score = current;
+      best = definition.id;
+    }
   }
   return best;
 }
 
-function scopeName(id: ScopeId) {
-  return SCOPE_DEFINITIONS.find((scope) => scope.id === id)?.name ?? "Itens Complementares";
-}
-
-const HEADER_WORDS = /^(?:(?:item|itens|descri[cç][aã]o|descricao|produto|equipamento|qtd\.?|qtde|quant\.?|quantidade|unit[aá]rio|unitario|vlr\.?|valor|total|un\.?|und\.?|unid\.?)\s+)+/i;
-
-function cleanDescription(line: string, prices: string[], qty?: number): string {
-  let value = line.replace(/\s+/g, " ").trim();
-  for (const price of prices) value = value.replace(price, " ");
-  value = value
-    .replace(/^[\d]+[.)-]\s*/, "")
-    .replace(/^[•\-–*]\s*/, "")
-    .replace(/\b(?:qtd|qtde|quant\.?|quantidade)\s*[:.]?\s*\d+/gi, " ")
-    .replace(/\b(?:un|und|unid|p[cç]|vb|m[eê]s|portas?|pontos?)\b\s*[:.]?/gi, " ")
-    .replace(/\s*[-–]\s*/g, " ")
-    .replace(/^\d+\s+/, "")
-    .replace(/\s{2,}/g, " ")
-    .replace(/[\s:;|,\-.]+$/, "")
-    .replace(/^[\s:;|,.]+/, "")
-    .trim();
-  // Remove cabeçalho de tabela repetido pelo extrator e o índice da coluna "Item".
-  value = value.replace(HEADER_WORDS, "").replace(/^\d{1,3}[.)\s-]+(?=[A-Za-zÀ-ÿ])/, "").trim();
-  // Remove a quantidade que ficou no fim da descrição (coluna Qtd).
-  if (qty && qty > 0) {
-    const tail = new RegExp(`\\s+${qty}\\s*$`);
-    if (tail.test(value)) value = value.replace(tail, "").trim();
-  }
-  return value.slice(0, 160);
-}
+const scopeName = (id: ScopeId) => SCOPE_DEFINITIONS.find((scope) => scope.id === id)?.name ?? "Itens Complementares";
 
 function extractSpec(line: string): string {
-  const matches = [...line.matchAll(SPEC_RE)].map((match) => match[0]);
-  const unique = [...new Set(matches)].slice(0, 6);
-  const model = line.match(/\b[A-Z]{2,}[A-Z0-9-]{3,}\b/)?.[0];
-  if (model && !unique.includes(model)) unique.unshift(model);
-  return unique.join(" · ").slice(0, 180);
+  const found = [...line.matchAll(SPEC)].map((match) => match[0].replace(/\s+/g, " "));
+  return [...new Set(found)].slice(0, 6).join(" · ").slice(0, 180);
 }
 
-const BARE_PRICE_RE = /(?<![\d.,])(\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2})(?![\d])/g;
+function cleanDescription(value: string): string {
+  return value
+    .replace(/\s*[|]\s*/g, " ")
+    .replace(/^[•\-–*]\s*/, "")
+    .replace(/\b(?:qtd|qtde|quant\.?|quantidade)\b\s*[:.]?\s*\d+/gi, " ")
+    .replace(/^[\d.,]+\s*/, "")
+    .replace(/\s*[-–]\s*(?=R\$)/g, " ")
+    .replace(/[\s:;,\-–]+$/, "")
+    .replace(/[\s:;,]+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
+
+type ParsedRow = Omit<CompetitorItem, "id" | "scope" | "scopeName" | "sourceFile">;
 
 /**
- * Preços da linha. Aceita "R$ 1.290,00" e também tabelas que trazem apenas
- * "1.290,00" (sem R$), comuns em PDFs de orçamento.
+ * Interpreta uma linha do orçamento concorrente.
+ * Aceita tanto linhas em texto corrido quanto colunas separadas pelo layout:
+ * [descrição] [qtd] [un] [unitário] [total].
  */
-function linePrices(line: string): { raw: string; value: number }[] {
-  const withPrefix = [...line.matchAll(PRICE_RE)]
-    .map((match) => ({ raw: match[0], value: parseBrl(match[1]) }))
-    .filter((price) => price.value > 0);
-  if (withPrefix.length) return withPrefix;
+function parseRow(cells: string[], fileHint: string): ParsedRow | null {
+  const values = cells.map((cell) => cell.trim()).filter(Boolean);
+  if (!values.length || headerish(values)) return null;
+  const joined = values.join(" | ");
+  if (IGNORE_LABEL.test(joined) && !TOTAL_LABEL.test(joined)) return null;
 
-  // Sem R$: exige ao menos dois números (unitário + total) ou contexto de valor,
-  // para não confundir modelos como "2CD2087" ou "8 TB" com preço.
-  const bare = [...line.matchAll(BARE_PRICE_RE)]
-    .map((match) => ({ raw: match[0], value: parseBrl(match[1]) }))
-    .filter((price) => price.value >= 1);
-  if (bare.length >= 2) return bare;
-  if (bare.length === 1 && /(?:valor|pre[cç]o|total|unit[aá]rio|\bvlr?\b)/i.test(line)) return bare;
-  return [];
-}
+  const numericCells: { index: number; values: number[] }[] = [];
+  values.forEach((cell, index) => {
+    const money = moneyValues(cell);
+    if (money.length) numericCells.push({ index, values: money });
+  });
+  if (!numericCells.length) return null;
 
-/** Títulos e cabeçalhos de página não devem virar parte da descrição de um item. */
-function isHeaderLine(line: string) {
-  const letters = line.replace(/[^A-Za-zÀ-ÿ]/g, "");
-  if (!letters || line.length < 7) return true;
-  const upper = (line.match(/[A-ZÀ-Ý]/g) ?? []).length;
-  return upper / letters.length > 0.85;
-}
+  // Quantidade: célula inteira (sem preço) entre a descrição e os valores.
+  const firstMoneyIndex = numericCells[0].index;
+  let qty: number | null = null;
+  let qtyIndex = -1;
+  for (let index = 0; index < firstMoneyIndex; index += 1) {
+    const cell = values[index];
+    const integer = cell.match(/^(\d{1,4})(?:\s*(?:x|un|und|unid|pç|pc|portas?|pontos?|cams?|câmeras?))?$/i);
+    if (integer) {
+      const candidate = Number(integer[1]);
+      if (candidate > 0 && candidate <= 5000) {
+        qty = candidate;
+        qtyIndex = index;
+      }
+    }
+  }
 
-/** Une linhas de tabela onde descrição e preço ficaram separados pelo extrator de PDF. */
-function joinLines(text: string): string[] {
-  const original = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const result: string[] = [];
-  let pending = "";
-  for (const line of original) {
-    const hasPrice = linePrices(line).length > 0;
-    if (hasPrice) {
-      result.push(pending && pending.length < 180 ? `${pending} ${line}` : line);
-      pending = "";
-    } else if (/^(total|valor total|investimento|subtotal|total geral)/i.test(line)) {
-      // O valor do total pode estar na linha seguinte.
-      pending = line;
-    } else if (!isHeaderLine(line) && line.length >= 8) {
-      pending = line.slice(0, 180);
+  // Unidade: célula curta e reconhecida, ou sufixo no texto da descrição.
+  let unit = "un";
+  let unitFromCell = false;
+  for (let index = 0; index < values.length; index += 1) {
+    if (index === qtyIndex) continue;
+    const cell = values[index];
+    if (UNIT_CELL.test(cell)) {
+      unit = /mes|mês/i.test(cell) ? "mês" : /^(m|mt|m²|m2)$/i.test(cell) ? "m" : cell.toLowerCase().replace(".", "");
+      unitFromCell = true;
+      break;
+    }
+  }
+  if (!unitFromCell) {
+    const suffix = joined.match(/(\d{1,4})\s*(portas?|pontos?|metros?|m\b|cams?|câmeras?|horas?)/i);
+    if (suffix) {
+      qty = qty ?? Number(suffix[1]);
+      unit = /porta/i.test(suffix[2]) ? "porta" : /ponto/i.test(suffix[2]) ? "ponto" : /metro|m\b/i.test(suffix[2]) ? "m" : /hora/i.test(suffix[2]) ? "h" : "un";
+    }
+  }
+
+  // Descrição: células que não são quantidade, unidade nem preço.
+  const descriptionCells = values.filter(
+    (_, index) => index !== qtyIndex && !numericCells.some((cell) => cell.index === index) && !UNIT_CELL.test(values[index]),
+  );
+  const description = cleanDescription(descriptionCells.join(" "));
+  if (description.length < 4) return null;
+
+  const money = numericCells.flatMap((cell) => cell.values);
+  let unitPrice = money[0];
+  let lineTotal = money[0];
+  if (money.length >= 2) {
+    const first = money[0];
+    const last = money[money.length - 1];
+    const implied = last / first;
+    if (last > first && Math.abs(implied - Math.round(implied)) < 0.05 && implied >= 2 && implied <= 5000) {
+      qty = qty ?? Math.round(implied);
+      lineTotal = last;
+      unitPrice = first;
+    } else if (qty && qty > 1 && Math.abs(first * qty - last) < Math.max(1, last * 0.02)) {
+      unitPrice = first;
+      lineTotal = last;
     } else {
-      pending = "";
+      unitPrice = last;
+      lineTotal = last;
     }
   }
-  return result;
+  if (qty && qty > 1) unitPrice = Math.round((lineTotal / qty) * 100) / 100;
+  else qty = 1;
+
+  const scope = classifyScope(`${description} ${fileHint}`);
+  const recurring = /\/\s*m[eê]s|por m[eê]s|mensal|\bm[eê]s\b/i.test(joined) && (scope === "monitoramento" || scope === "manutencao" || unit === "mês");
+
+  return {
+    description,
+    spec: extractSpec(joined),
+    qty: Math.max(1, Math.round(qty ?? 1)),
+    unit: recurring ? "mês" : unit,
+    unitPrice: Math.round(unitPrice * 100) / 100,
+    lineTotal: Math.round(lineTotal * 100) / 100,
+    recurring,
+    rawLine: joined.slice(0, 400),
+  };
 }
 
-const QTY_RULES: { re: RegExp; unit: string }[] = [
-  { re: /\b(\d{1,4})\s*(?:x|×)\s+/i, unit: "un" },
-  { re: /\b(\d{1,4})\s*(?:unidades?|unid\.?|und\.?|un\.?|p[cç]s?\.?|pe[cç]as?)\b/i, unit: "un" },
-  { re: /\b(\d{1,4})\s*(?:c[aâ]meras?|cameras?|cams?|pontos? de c[aâ]mera)\b/i, unit: "un" },
-  { re: /\b(\d{1,4})\s*portas?\b/i, unit: "porta" },
-  { re: /\b(\d{1,4})\s*(?:pontos?|acessos?|leitores?)\b/i, unit: "ponto" },
-  { re: /\b(\d{1,5})\s*(?:metros?|m\b|m lineares?)\b/i, unit: "m" },
-  { re: /\b(\d{1,3})\s*(?:meses|m[eê]s)\b/i, unit: "mês" },
-  { re: /\b(\d{1,3})\s*(?:kits?|conjuntos?|licen[cç]as?|turmas?)\b/i, unit: "vb" },
-];
+/* -------------------------------------------------------------------------- */
+/* Análise por documento                                                      */
+/* -------------------------------------------------------------------------- */
 
-/** Quantidade e unidade a partir da linha do orçamento do concorrente. */
-function quantityFrom(line: string): { qty: number; unit: string } {
-  const field = line.match(QTY_FIELD_RE);
-  if (field) {
-    const qty = Number(field[1]);
-    return { qty: Number.isFinite(qty) && qty > 0 && qty <= 10000 ? Math.round(qty) : 1, unit: "un" };
-  }
-  for (const rule of QTY_RULES) {
-    const match = line.match(rule.re);
-    if (match) {
-      const qty = Number(match[1]);
-      if (Number.isFinite(qty) && qty > 0 && qty <= 10000) return { qty: Math.round(qty), unit: rule.unit };
-    }
-  }
-  const unitMatch = line.match(UNIT_RE);
-  const qty = unitMatch ? Number(unitMatch[1]) : 1;
-  return { qty: Number.isFinite(qty) && qty > 0 && qty <= 10000 ? Math.round(qty) : 1, unit: "un" };
+function textToCells(line: string): string[] {
+  if (line.includes("|")) return line.split("|").map((cell) => cell.trim()).filter(Boolean);
+  // Texto corrido: separa preços e quantidades sem perder a descrição.
+  return [line];
 }
 
-function parseDocument(doc: ReferenceDocumentInput): {
-  items: CompetitorItem[];
-  declaredTotal: number | null;
-  itemsTotal: number;
-  conditions: string[];
-  hasText: boolean;
-  usedManualText: boolean;
-  textLength: number;
-} {
+function analyzeDocument(doc: ReferenceDocumentInput) {
   const manual = (doc.manualText ?? "").trim();
-  const text = manual || (doc.extractedText ?? "").trim();
+  const source = manual || (doc.extractedText ?? "").trim();
   const usedManualText = manual.length > 0;
-  const lines = joinLines(text);
-  const items: CompetitorItem[] = [];
+  const layout = !manual && doc.layoutRows && doc.layoutRows.length >= 3 ? doc.layoutRows : null;
+  const usedLayout = Boolean(layout);
+
+  const rows: string[][] = [];
+  if (layout) rows.push(...layout);
+  else {
+    for (const line of source.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      rows.push(textToCells(trimmed));
+    }
+  }
+
+  const items: ParsedRow[] = [];
   const conditions: string[] = [];
   let declaredTotal: number | null = null;
-  let currentScope: ScopeId | null = null;
 
-  for (const raw of lines) {
-    const prices = linePrices(raw);
-    const lower = raw.toLowerCase();
-
-    // Linhas de subtotal de escopo não são o total geral do documento.
-    if (/^\s*subtotal|^\s*sub-total/.test(lower)) continue;
-
-    const isTotal = TOTAL_RE.test(raw);
-    if (isTotal && prices.length) {
-      // Em "Total CFTV R$ x" com escopo explícito, o valor fecha apenas aquele escopo.
-      const scopedTotal = /cftv|c[aâ]mera|acesso|perimetr|cerca|rede|monitoramento|manuten|servi[cç]os/i.test(raw);
-      const candidate = prices[prices.length - 1].value;
-      if (scopedTotal) continue;
-      declaredTotal = Math.max(declaredTotal ?? 0, candidate);
+  for (const cells of rows) {
+    const joined = cells.join(" | ");
+    if (TOTAL_LABEL.test(joined) && !IGNORE_LABEL.test(joined.replace(TOTAL_LABEL, ""))) {
+      const money = moneyValues(joined);
+      if (money.length) declaredTotal = Math.max(declaredTotal ?? 0, money[money.length - 1]);
       continue;
     }
-
-    // Cabeçalho de escopo: orienta a classificação dos itens seguintes.
-    const headingScope = headingToScope(raw);
-    if (headingScope) {
-      if (!prices.length) {
-        currentScope = headingScope;
-        continue;
-      }
-    }
-
-    if (!prices.length) {
-      if (CONDITION_RE.test(raw) && raw.length < 300 && conditions.length < 14) conditions.push(raw);
+    const parsed = parseRow(cells, doc.fileName);
+    if (parsed) {
+      // "Instalação" duplicada em colunas separadas: mantém apenas a linha com valor.
+      items.push(parsed);
       continue;
     }
-
-    const rough = cleanDescription(raw, prices.map((price) => price.raw)) || cleanDescription(raw, []);
-    if (rough.length < 3) continue;
-
-    const { qty: detectedQty, unit } = quantityFrom(rough);
-    let description = cleanDescription(raw, prices.map((price) => price.raw), detectedQty) || rough;
-    const scope = headingScope ?? (classifyScope(description, doc.fileName) === "outros" && currentScope ? currentScope : classifyScope(description, doc.fileName));
-    const recurring = /\/\s*m[eê]s\b|por m[eê]s|mensal|\bmensalidade\b/i.test(raw) && /manuten|monitor|noc|suporte/i.test(raw);
-
-    let qty = detectedQty;
-    let unitPrice = prices[0].value;
-    let lineTotal = prices[0].value;
-
-    if (prices.length >= 2) {
-      const first = prices[0].value;
-      const last = prices[prices.length - 1].value;
-      const implied = first > 0 ? last / first : 0;
-      // "8 × 1.290,00 = 10.320,00": deduz a quantidade pela razão dos valores.
-      if (implied >= 1.5 && Math.abs(implied - Math.round(implied)) < 0.08 && implied <= 10000) {
-        qty = Math.round(implied);
-        unitPrice = Math.round((last / qty) * 100) / 100;
-        lineTotal = last;
-      } else if (detectedQty > 1 && Math.abs(first * detectedQty - last) <= Math.max(1, first * detectedQty * 0.03)) {
-        // Quantidade escrita e total coerente com unitário × qtd.
-        qty = detectedQty;
-        unitPrice = first;
-        lineTotal = last;
-      } else {
-        unitPrice = first;
-        lineTotal = last;
-        qty = 1;
-      }
-    } else if (detectedQty > 1) {
-      // Valor único com quantidade na linha: assume unitário quando há indício claro.
-      if (/unit[aá]rio|cada|\bcada\b|\bun\.?\b/i.test(raw)) {
-        unitPrice = prices[0].value;
-        lineTotal = Math.round(unitPrice * qty * 100) / 100;
-      } else {
-        unitPrice = Math.round((prices[0].value / qty) * 100) / 100;
-        lineTotal = prices[0].value;
-      }
-    }
-
-    if (!Number.isFinite(unitPrice) || unitPrice <= 0 || !Number.isFinite(lineTotal) || lineTotal <= 0) continue;
-
-    // A quantidade final pode ter sido deduzida pelos valores: reaproveita para
-    // remover a coluna "Qtd" que sobrou no fim da descrição.
-    if (qty !== detectedQty) {
-      description = cleanDescription(raw, prices.map((price) => price.raw), qty) || description;
-    }
-
-    const key = `${scope}|${norm(description).slice(0, 80)}|${Math.round(lineTotal * 100)}`;
-    if (items.some((item) => `${item.scope}|${norm(item.description).slice(0, 80)}|${Math.round(item.lineTotal * 100)}` === key)) continue;
-
-    items.push({
-      id: `ref-${doc.id}-${items.length}`,
-      description: description.slice(0, 160),
-      spec: extractSpec(raw),
-      qty,
-      unit: recurring ? "mês" : unit,
-      unitPrice: Math.round(unitPrice * 100) / 100,
-      lineTotal: Math.round(lineTotal * 100) / 100,
-      scope,
-      scopeName: scopeName(scope),
-      sourceFile: doc.fileName,
-      recurring,
-      rawLine: raw.slice(0, 400),
-    });
-    if (items.length >= 120) break;
-  }
-
-  const itemsTotal = Math.round(items.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100;
-  return { items, declaredTotal, itemsTotal, conditions, hasText: text.length > 0, usedManualText, textLength: text.length };
-}
-
-/** Reconhece títulos de escopo ("CFTV IP", "CONTROLE DE ACESSO") no texto do orçamento. */
-function headingToScope(line: string): ScopeId | null {
-  const value = line.trim();
-  if (!value || value.length > 90 || value.split(/\s+/).length > 8) return null;
-  if (linePrices(value).length) return null;
-  for (const definition of SCOPE_DEFINITIONS) {
-    if (definition.id === "outros") continue;
-    for (const keyword of definition.keywords) {
-      if (new RegExp(`^\\s*(?:\\d+[.)]\\s*)?(?:escopo\\s+)?${keyword.source}`, "i").test(value)) return definition.id;
+    if (!moneyValues(joined) && joined.length < 240 && /pagamento|prazo|validade|garantia|frete|condi|observ|imposto|parcel/i.test(joined)) {
+      if (conditions.length < 16) conditions.push(prazoLimpo(joined));
     }
   }
-  return null;
+
+  // Remoção de duplicidade exata (mesma descrição e valor).
+  const unique: ParsedRow[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const key = `${normalize(item.description).slice(0, 70)}|${item.lineTotal}|${item.qty}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(item);
+  }
+
+  const itemsTotal = Math.round(unique.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100;
+  return { items: unique, declaredTotal, itemsTotal, conditions, hasText: source.length > 0, usedManualText, usedLayout };
 }
+
+function prazoLimpo(value: string) {
+  return value.replace(/\s+/g, " ").replace(/\s*[|]\s*/g, " ").trim().slice(0, 220);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Consolidação                                                               */
+/* -------------------------------------------------------------------------- */
 
 export function analyzeCompetitorDocuments(docs: ReferenceDocumentInput[]): CompetitorAnalysis {
   const documents: CompetitorDocument[] = [];
@@ -437,109 +375,149 @@ export function analyzeCompetitorDocuments(docs: ReferenceDocumentInput[]): Comp
   let monthlyValue = 0;
 
   for (const doc of docs) {
-    const parsed = parseDocument(doc);
+    const parsed = analyzeDocument(doc);
     const adoptedTotal = Math.max(parsed.declaredTotal ?? 0, parsed.itemsTotal);
     matchedValue += adoptedTotal;
     monthlyValue += parsed.items.filter((item) => item.recurring).reduce((sum, item) => sum + item.lineTotal, 0);
-    items.push(...parsed.items);
-    for (const condition of parsed.conditions) {
-      if (!conditions.includes(condition) && conditions.length < 20) conditions.push(condition);
-    }
+    parsed.items.forEach((item, index) => {
+      const scope = classifyScope(`${item.description} ${doc.fileName}`);
+      items.push({
+        ...item,
+        id: `ref-${doc.id}-${index}`,
+        scope,
+        scopeName: scopeName(scope),
+        sourceFile: doc.fileName,
+      });
+    });
+    parsed.conditions.forEach((line) => {
+      if (conditions.length < 18 && !conditions.includes(line)) conditions.push(line);
+    });
+
     documents.push({
       id: doc.id,
       fileName: doc.fileName,
       hasText: parsed.hasText,
       usedManualText: parsed.usedManualText,
+      usedLayout: parsed.usedLayout,
       pages: doc.pages,
-      textLength: parsed.textLength,
       itemCount: parsed.items.length,
       declaredTotal: parsed.declaredTotal,
       detectedItemsTotal: parsed.itemsTotal,
       adoptedTotal,
-      conditionLines: parsed.conditions,
-      notes: doc.note ? [doc.note] : [],
+      conditions: parsed.conditions,
     });
 
     if (!parsed.hasText) {
-      warnings.push(`"${doc.fileName}" não tem texto legível (PDF escaneado ou imagem). Abra o arquivo e transcreva os itens no campo "Texto digitado" para uma análise completa.`);
+      warnings.push(`"${doc.fileName}" não tem texto legível (PDF escaneado ou imagem). Use “Transcrever” e cole os itens com quantidade e valor.`);
+    } else if (!parsed.items.length) {
+      warnings.push(`"${doc.fileName}": nenhum equipamento com valor foi identificado. Confira a transcrição para separar descrição, quantidade e preço.`);
     }
-    if (parsed.declaredTotal !== null && parsed.itemsTotal > parsed.declaredTotal * 1.02 && parsed.itemsTotal > 0) {
-      warnings.push(`Em "${doc.fileName}", a soma dos itens (${brl(parsed.itemsTotal)}) superou o total declarado (${brl(parsed.declaredTotal)}). Usamos a soma dos itens para não reduzir valor; confira a leitura.`);
+    if (parsed.declaredTotal !== null && parsed.itemsTotal > parsed.declaredTotal * 1.02) {
+      warnings.push(`Em "${doc.fileName}", a soma dos itens (${brl(parsed.itemsTotal)}) ficou acima do total declarado (${brl(parsed.declaredTotal)}). O valor do concorrente foi mantido e os itens foram ajustados proporcionalmente, sem alterar quantidades.`);
     }
-    if (parsed.declaredTotal !== null && parsed.itemsTotal > 0 && parsed.declaredTotal > parsed.itemsTotal * 1.02) {
-      warnings.push(`Em "${doc.fileName}", o total declarado (${brl(parsed.declaredTotal)}) é maior que os itens identificados (${brl(parsed.itemsTotal)}). A diferença foi mantida como item de equalização, sem inventar equipamentos.`);
+    if (parsed.declaredTotal !== null && parsed.declaredTotal > parsed.itemsTotal * 1.02 && parsed.items.length) {
+      warnings.push(`Em "${doc.fileName}", o total declarado (${brl(parsed.declaredTotal)}) é maior que a soma dos itens identificados (${brl(parsed.itemsTotal)}). A diferença foi lançada como item de equalização, sem inventar equipamentos.`);
     }
   }
 
-  // Itens de equalização: preservam o valor do concorrente quando a leitura não alcança o total.
+  // Equalização positiva: mantém o valor do concorrente com um item explícito.
   for (const doc of documents) {
     const difference = Math.round((doc.adoptedTotal - doc.detectedItemsTotal) * 100) / 100;
     if (difference > 0.5 && doc.itemCount > 0) {
+      const scope: ScopeId = "outros";
       items.push({
         id: `equal-${doc.id}`,
-        description: `Complementos de escopo e serviços — equalização com o total declarado em ${doc.fileName}`,
-        spec: "Diferença entre o total do orçamento de referência e os itens lidos; revise antes de enviar ao cliente.",
+        description: `Serviços e complementos não detalhados — equalização com ${doc.fileName}`,
+        spec: "Diferença entre o total declarado e os itens lidos. Revise antes de enviar.",
         qty: 1,
         unit: "vb",
         unitPrice: difference,
         lineTotal: difference,
-        scope: "outros",
-        scopeName: scopeName("outros"),
+        scope,
+        scopeName: scopeName(scope),
         sourceFile: doc.fileName,
         recurring: false,
-        rawLine: "Equalização de valores identificada automaticamente",
+        rawLine: "Equalização de valor",
       });
-    }
-    if (difference > 0.5 && doc.itemCount === 0) {
+    } else if (!doc.itemCount && doc.adoptedTotal > 0) {
+      const scope: ScopeId = "outros";
       items.push({
         id: `single-${doc.id}`,
-        description: `Escopo conforme proposta de referência — ${doc.fileName}`,
-        spec: "Transcreva os itens no campo de texto para detalhar equipamentos e quantidades.",
+        description: `Escopo da proposta de referência — ${doc.fileName}`,
+        spec: "Sem itens detalhados no arquivo; transcreva para discriminar equipamentos.",
         qty: 1,
         unit: "vb",
-        unitPrice: difference,
-        lineTotal: difference,
-        scope: "outros",
-        scopeName: scopeName("outros"),
+        unitPrice: doc.adoptedTotal,
+        lineTotal: doc.adoptedTotal,
+        scope,
+        scopeName: scopeName(scope),
         sourceFile: doc.fileName,
         recurring: false,
-        rawLine: "Total declarado sem itens identificados",
+        rawLine: "Total declarado",
       });
     }
   }
 
-  const scopes: CompetitorScope[] = SCOPE_DEFINITIONS.map((scope) => {
-    const scopeItems = items.filter((item) => item.scope === scope.id);
+  // Equalização negativa: se a leitura somou mais que o total, ajusta proporcionalmente
+  // para o total exato do concorrente, preservando quantidades e descrições.
+  const target = Math.round(matchedValue * 100) / 100;
+  let itemsValue = Math.round(items.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100;
+  if (target > 0 && Math.abs(itemsValue - target) > 0.02) {
+    const factor = target / itemsValue;
+    for (const item of items) {
+      item.unitPrice = Math.round(item.unitPrice * factor * 100) / 100;
+      item.lineTotal = Math.round(item.qty * item.unitPrice * 100) / 100;
+    }
+    itemsValue = Math.round(items.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100;
+    const residual = Math.round((target - itemsValue) * 100) / 100;
+    if (Math.abs(residual) >= 0.01 && items.length) {
+      const last = items[items.length - 1];
+      last.lineTotal = Math.round((last.lineTotal + residual) * 100) / 100;
+      last.unitPrice = Math.round((last.lineTotal / last.qty) * 100) / 100;
+      itemsValue = Math.round(items.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100;
+    }
+    if (items.length && documents.some((doc) => doc.itemCount)) {
+      warnings.push("Os itens lidos somavam mais que o total do concorrente; os preços unitários foram ajustados proporcionalmente para o mesmo total, mantendo descrições e quantidades.");
+    }
+  }
+
+  const scopes: CompetitorScope[] = SCOPE_DEFINITIONS.map((definition) => {
+    const scopeItems = items.filter((item) => item.scope === definition.id);
     return {
-      id: scope.id,
-      name: scope.name,
+      id: definition.id,
+      name: definition.name,
       items: scopeItems,
       subtotal: Math.round(scopeItems.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100,
+      service: definition.service,
     };
   }).filter((scope) => scope.items.length > 0);
 
-  const itemsValue = Math.round(items.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100;
   const hasCftvAndAccess = scopes.some((scope) => scope.id === "cftv") && scopes.some((scope) => scope.id === "acesso");
   if (!docs.length) warnings.push("Nenhum arquivo de referência enviado.");
-  if (docs.length && !items.length) warnings.push("Não foi possível identificar itens. Transcreva o texto do arquivo ou revise os valores manualmente na proposta.");
   if (docs.length > 1) {
-    warnings.push(`${docs.length} arquivos considerados como documentos complementares do mesmo concorrente; os totais foram somados. Se forem propostas alternativas, exclua as que não devem compor a equalização.`);
+    warnings.push(`${docs.length} arquivos foram tratados como documentos complementares do mesmo concorrente. Se forem propostas alternativas, exclua as que não devem compor a igualdade.`);
   }
+  const layouts = documents.filter((doc) => doc.usedLayout).length;
+  if (layouts) warnings.push(`${layouts} arquivo(s) lidos pela posição das colunas (descrição, quantidade, unitário e total), o que melhora a leitura de tabelas.`);
 
   return {
     documents,
     items,
     scopes,
     conditions,
-    matchedValue: Math.round(matchedValue * 100) / 100,
+    matchedValue: target,
     itemsValue,
     monthlyValue: Math.round(monthlyValue * 100) / 100,
-    note: "Valores igualados à proposta de referência — nenhum desconto ou preço melhor foi aplicado. Ajuste os valores no editor depois de salvar.",
+    note: `Valores iguais aos da proposta de referência (${brl(target)}). Nenhum desconto ou preço menor foi aplicado — edite os preços no editor depois de salvar.`,
     warnings,
     hasCftvAndAccess,
-    source: "Motor de análise Cipriano · leitura estruturada de equipamentos, quantidades e escopos",
+    source: "Motor de análise Cipriano · colunas do PDF, equipamentos, quantidades e escopos",
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Proposta igualada                                                          */
+/* -------------------------------------------------------------------------- */
 
 export type MatchedProposalInput = {
   analysis: CompetitorAnalysis;
@@ -554,96 +532,110 @@ export type MatchedProposalInput = {
 
 export function buildMatchedProposal(input: MatchedProposalInput): ProposalDraft {
   const { analysis, type, settings } = input;
+  const scopeService = new Map(SCOPE_DEFINITIONS.map((scope) => [scope.id, scope.service]));
   const items: ProposalItem[] = analysis.items.map((item, index) => ({
     id: `matched-${index}`,
-    kind: SCOPE_DEFINITIONS.find((scope) => scope.id === item.scope)?.service ? "servico" : "equipamento",
+    kind: scopeService.get(item.scope) ? "servico" : "equipamento",
     desc: item.description,
-    spec: [item.spec, `Origem: ${item.sourceFile}`, `Escopo: ${item.scopeName}`].filter(Boolean).join(" · "),
+    spec: [item.spec, `Escopo: ${item.scopeName}`, `Ref.: ${item.sourceFile}`].filter(Boolean).join(" · "),
     unit: item.unit,
     qty: item.qty,
     price: item.unitPrice,
-    group: item.scopeName,
+    scope: item.scopeName,
   }));
 
   const sections: ProposalSection[] = [];
-  const add = (id: string, title: string, body: string, kind: ProposalSection["kind"] = "text") =>
-    sections.push({ id, title, body, enabled: true, kind });
+  const add = (
+    id: string,
+    title: string,
+    body: string,
+    kind: ProposalSection["kind"] = "text",
+    extra: Partial<ProposalSection> = {},
+  ) => sections.push({ id, title, body, enabled: true, kind, ...extra });
 
   const scopeNames = analysis.scopes.map((scope) => scope.name).join(", ") || "escopo a detalhar";
   add(
     "objeto",
     "Objeto",
-    `Proposta comercial de segurança eletrônica para ${input.clientName || "o cliente"}, elaborada em equalização de escopo e valor com a documentação de referência apresentada.\n\nEscopos identificados: ${scopeNames}.\n\nLocal: ${input.site || "a confirmar"}. Os valores abaixo foram igualados aos valores de referência; nenhuma redução automática de preço foi aplicada.`,
+    `Proposta comercial de segurança eletrônica para ${input.clientName || "o cliente"}, elaborada com escopo e valor equivalentes à documentação de referência apresentada.\n\nEscopos: ${scopeNames}.\n\nLocal: ${input.site || "a confirmar"}.\n\nValor total igualado à referência: ${brl(analysis.matchedValue)}. Nenhum desconto foi aplicado automaticamente; os preços permanecem editáveis.`,
   );
 
   if (type === "completa") {
     add(
       "empresa",
       "Cipriano Tech & Security",
-      `${settings.companyName} atua em projetos, instalação, manutenção e monitoramento de sistemas de segurança eletrônica. Responsável técnico: ${settings.director} · ${settings.crea} · CNPJ ${settings.cnpj}.`,
+      `${settings.companyName} atua em projetos, instalação, manutenção e monitoramento de segurança eletrônica. Responsável técnico: ${settings.director} · ${settings.crea} · CNPJ ${settings.cnpj}.`,
     );
     add(
       "objetivo",
       "Objetivo",
-      "Apresentar escopo equivalente ao da proposta de referência, organizado por disciplina técnica para facilitar a comparação pelo cliente, com os mesmos equipamentos, quantidades e valores identificados.",
+      "Apresentar proposta equivalente à referência, com os mesmos equipamentos, quantidades e valores, organizada por disciplina técnica para facilitar a conferência e a comparação pelo cliente.",
     );
   }
 
-  // Separação visível por escopo: resumo de disciplinas, sem repetir preço por item
-  // (a tabela de equipamentos já é agrupada por escopo no documento).
-  const scopeSummary = analysis.scopes.map((scope) => {
-    const units = scope.items.map((item) => `${item.qty} ${item.unit} ${item.description}`).join("; ");
-    return `• ${scope.name} — ${scope.items.length} item(ns) · subtotal ${brl(scope.subtotal)}.\n   ${units}`;
-  });
+  // Resumo dos escopos em tabela, com subtotal por disciplina.
+  const summaryRows: SectionTableRow[] = analysis.scopes.map((scope) => ({
+    label: scope.name,
+    cipriano: `${scope.items.length} item(ns) · ${brl(scope.subtotal)}`,
+    client: scope.items.map((item) => `${item.qty} ${item.unit}`).join(" + ").slice(0, 80),
+  }));
   add(
-    "escopos-referencia",
-    "Escopos da proposta",
-    `${scopeSummary.join("\n\n")}\n\nCada disciplina está discriminada em sua própria seção na lista de equipamentos e serviços abaixo, permitindo conferência item a item.`,
+    "resumo-escopos",
+    "Resumo por escopo",
+    "Os escopos estão separados por disciplina. CFTV IP e Controle de Acesso compartilham a mesma rede, o mesmo rack e a mesma alimentação, porém são apresentados em seções distintas para conferência do cliente, sem duplicidade de infraestrutura.",
+    "table",
+    {
+      rows: summaryRows,
+      columns: ["Escopo", "Itens e subtotal", "Quantidades"],
+    },
   );
 
-  if (analysis.hasCftvAndAccess) {
-    add(
-      "integracao",
-      "Integração entre os escopos",
-      "CFTV IP e Controle de Acesso estão apresentados em seções separadas para melhor visualização e conferência do cliente. Ambos compartilham a mesma infraestrutura de rede, cabeamento estruturado, alimentação e rack, sem duplicidade de infraestrutura ou cobrança em duplicidade por esse motivo.",
+  for (const scope of analysis.scopes) {
+    const lines = scope.items.map(
+      (item) =>
+        `• ${item.qty} ${item.unit} — ${item.description}${item.spec ? ` (${item.spec})` : ""} · unitário ${brl(item.unitPrice)} · subtotal ${brl(item.lineTotal)}.`,
     );
-  } else if (analysis.scopes.length > 1) {
-    add(
-      "integracao",
-      "Integração entre os escopos",
-      "Os escopos foram separados por disciplina técnica para facilitar a conferência do cliente. Quando aplicável, compartilham a mesma rede, cabeamento, energia e rack, sem duplicidade de infraestrutura. Equipamentos e quantidades permanecem discriminados em cada seção.",
-    );
+    add(`escopo-${scope.id}`, `Escopo · ${scope.name}`, `${lines.join("\n")}\n\nSubtotal do escopo: ${brl(scope.subtotal)}.`);
   }
+
+  add(
+    "integracao",
+    "Integração entre os escopos",
+    analysis.hasCftvAndAccess
+      ? "CFTV IP e Controle de Acesso são escopos distintos, apresentados separadamente para melhor visualização das quantidades e dos valores. Ambos utilizam a mesma infraestrutura de rede, cabeamento estruturado, rack, nobreak e alimentação — itens compartilhados aparecem uma única vez, sem cobrança em duplicidade."
+      : "Os escopos foram separados por disciplina técnica. Quando compartilham rede, cabeamento, rack ou alimentação, tais itens aparecem uma única vez, evitando duplicidade de cobrança. Equipamentos e quantidades permanecem discriminados em cada seção.",
+    "text",
+  );
 
   add(
     "equipamentos",
     "Lista de Equipamentos e Serviços",
-    "A tabela abaixo reproduz os itens identificados na proposta de referência, com quantidades e valores unitários iguais aos do concorrente. Confira cada linha antes de enviar.",
+    "Itens agrupados por escopo, com as mesmas quantidades, descrições e valores da proposta de referência. Confira cada linha antes de enviar.",
     "items",
   );
 
   add(
     "valor",
     "Valor",
-    `Valor total igualado à proposta de referência: ${brl(analysis.matchedValue)}. Não foi aplicado desconto nem preço inferior. O valor é totalmente editável no editor da proposta.`,
+    `Valor total igualado à referência: ${brl(analysis.matchedValue)}. Não houve redução automática de preço. Alterações de valor são feitas no editor da proposta, item a item.`,
     "totals",
   );
 
   const conditionBullets = analysis.conditions.length
-    ? analysis.conditions.slice(0, 10)
+    ? analysis.conditions.slice(0, 10).map((line) => `• ${line}`)
     : [
-        `Pagamento: ${settings.defaultPaymentTerms}`,
-        `Prazo de execução: ${settings.defaultDeliveryTime}`,
-        `Garantia: ${settings.defaultWarranty}`,
-        `Validade da proposta: ${input.validityDays} dias corridos a partir da emissão`,
+        `• Pagamento: ${settings.defaultPaymentTerms}`,
+        `• Prazo de execução: ${settings.defaultDeliveryTime}`,
+        `• Garantia: ${settings.defaultWarranty}`,
+        `• Validade da proposta: ${input.validityDays} dias corridos a partir da emissão`,
       ];
-  add("condicoes", "Condições Comerciais", conditionBullets.map((line) => `• ${line}`).join("\n"), "terms");
+  add("condicoes", "Condições Comerciais", conditionBullets.join("\n"), "terms");
 
   if (type === "completa") {
     add(
       "responsabilidades",
-      "Responsabilidades",
-      `A ${settings.companyName} executa fornecimento, instalação, configuração e comissionamento conforme os escopos discriminados. O cliente disponibiliza acesso, pontos de energia, infraestrutura de rede quando necessária e um responsável para aprovações. Itens não listados dependem de orçamento complementar aprovado por escrito.`,
+      "Responsabilidades e exclusões",
+      `A ${settings.companyName} executa fornecimento, instalação, configuração e comissionamento conforme os escopos discriminados. O cliente disponibiliza acesso, pontos de energia, infraestrutura de rede quando necessária e responsável para aprovações. Obras civis, pontos elétricos e itens não listados dependem de orçamento complementar aprovado por escrito.`,
     );
     add(
       "validade",
@@ -652,11 +644,7 @@ export function buildMatchedProposal(input: MatchedProposalInput): ProposalDraft
     );
   }
 
-  add(
-    "aceite",
-    "Aceite",
-    "Ao assinar, o cliente declara estar de acordo com os escopos, equipamentos, quantidades e valores desta proposta.",
-  );
+  add("aceite", "Aceite", "Ao assinar, o cliente declara estar de acordo com os escopos, equipamentos, quantidades e valores desta proposta.");
 
   const briefing: Briefing = {
     ...defaultBriefing,
@@ -684,24 +672,24 @@ export function buildMatchedProposal(input: MatchedProposalInput): ProposalDraft
   };
 }
 
-export function matchedInsights(analysis: CompetitorAnalysis, totals: ReturnType<typeof calcTotals>) {
+export function matchedInsights(analysis: CompetitorAnalysis, totals: { totalCents: number }) {
   const out: { tone: "info" | "warn" | "ok"; title: string; detail: string }[] = [
     {
-      tone: "ok",
-      title: "Valores igualados, não reduzidos",
-      detail: `Total de referência ${brl(analysis.matchedValue)}; total gerado ${brl(totals.totalCents / 100)}. Nenhum desconto automático foi aplicado. Você pode alterar os preços no editor depois de salvar.`,
+      tone: Math.abs(totals.totalCents / 100 - analysis.matchedValue) < 0.05 ? "ok" : "warn",
+      title: "Valores iguais à referência, sem desconto",
+      detail: `Referência ${brl(analysis.matchedValue)} · proposta ${brl(totals.totalCents / 100)}. Quantidades preservadas; altere os preços no editor depois de salvar.`,
     },
     {
       tone: "info",
       title: `${analysis.items.length} itens em ${analysis.scopes.length} escopo(s)`,
-      detail: analysis.scopes.map((scope) => `${scope.name}: ${scope.items.length} item(ns)`).join(" · ") || "Nenhum escopo identificado; transcreva o texto para melhorar a leitura.",
+      detail: analysis.scopes.map((scope) => `${scope.name}: ${scope.items.length} item(ns) · ${brl(scope.subtotal)}`).join(" | "),
     },
   ];
   if (analysis.hasCftvAndAccess) {
     out.push({
       tone: "info",
-      title: "CFTV e acesso separados",
-      detail: "As duas disciplinas ganharam seções próprias no documento. A rede compartilhada foi explicada em um bloco de integração, sem criar cobrança em duplicidade.",
+      title: "CFTV IP e Controle de Acesso separados",
+      detail: "Cada disciplina tem sua própria seção e tabela. O bloco de integração explica a rede compartilhada sem duplicar infraestrutura.",
     });
   }
   for (const warning of analysis.warnings.slice(0, 2)) out.push({ tone: "warn", title: "Confira a leitura", detail: warning });

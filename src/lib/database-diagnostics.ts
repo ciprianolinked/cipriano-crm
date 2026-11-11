@@ -2,6 +2,7 @@ import { getTableName, getTableColumns, is, sql } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
 import { db, DatabaseConfigurationError, getDatabaseConfigurationStatus, isNeonDatabase } from "@/db";
 import * as schema from "@/db/schema";
+import { ensureReferenceSchema } from "@/lib/db-migrations";
 
 export type DatabaseDiagnosticCode =
   | "ready" | "env_missing" | "env_invalid" | "auth_failed" | "database_not_found"
@@ -87,6 +88,10 @@ export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
     return result;
   };
   if (configuration !== "ready") return finish(configuration === "missing" ? "env_missing" : "env_invalid");
+
+  // Reparo idempotente das colunas da tabela de concorrentes: evita 500 quando o
+  // deploy chega antes da migração manual e mantém o healthcheck coerente.
+  await ensureReferenceSchema();
 
   try {
     await db.execute(sql`select 1`);

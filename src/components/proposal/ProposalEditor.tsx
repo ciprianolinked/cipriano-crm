@@ -11,7 +11,6 @@ import { ProposalDocument, type DocData, type DocSettings } from "@/components/p
 import { PrintActions } from "@/components/proposal/PrintActions";
 import { ProposalDeleteButton } from "@/components/proposal/ProposalDeleteButton";
 import { isMaintenanceProposal, maintenanceSummary } from "@/lib/proposal/maintenance-plan";
-import { ReferencePanel, type AnalysisResponse } from "@/components/proposal/ReferencePanel";
 
 export type EditorActivity = {
   id: string;
@@ -75,8 +74,7 @@ export function ProposalEditor({
   const router = useRouter();
   const [proposal, setProposal] = useState<EditorProposal>(initial);
   const [activities, setActivities] = useState<EditorActivity[]>(initialActivities);
-  const [tab, setTab] = useState<"documento" | "itens" | "concorrente" | "crm">("documento");
-  const [competitorFlash, setCompetitorFlash] = useState("");
+  const [tab, setTab] = useState<"documento" | "itens" | "crm">("documento");
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -276,31 +274,6 @@ export function ProposalEditor({
     }
   }
 
-  function applyReferenceAnalysis(result: AnalysisResponse) {
-    const matched = result.draft;
-    const summary = matched.sections.find((section) => section.id === "escopos-referencia");
-    const integration = matched.sections.find((section) => section.id === "integracao");
-
-    const inserted: ProposalSection[] = [];
-    if (integration) inserted.push({ ...integration, enabled: true });
-    if (summary) inserted.push({ ...summary, enabled: true });
-
-    // Preserva o texto atual; substitui apenas itens e insere os blocos de escopo.
-    const base = proposal.sections.filter(
-      (section) => section.id !== "escopos-referencia" && section.id !== "integracao",
-    );
-    const itemsIndex = base.findIndex((section) => section.kind === "items");
-    const sections = [...base];
-    sections.splice(itemsIndex >= 0 ? itemsIndex : sections.length, 0, ...inserted);
-
-    update({ items: matched.items, sections, discountPct: 0 });
-    setCompetitorFlash(
-      `${matched.items.length} itens aplicados em ${result.analysis.scopes.length} escopo(s). Valor igualado a ${brl(
-        result.analysis.matchedValue,
-      )} sem desconto automático — ajuste os preços na aba “Itens & valores” e clique em Salvar.`,
-    );
-  }
-
   async function toggleArchive() {
     const archived = !proposal.archived;
     update({ archived });
@@ -415,7 +388,6 @@ export function ProposalEditor({
               [
                 ["documento", "Documento"],
                 ["itens", "Itens & valores"],
-                ["concorrente", "Concorrente"],
                 ["crm", "CRM"],
               ] as const
             ).map(([id, label]) => (
@@ -726,34 +698,6 @@ export function ProposalEditor({
                   + Item personalizado
                 </button>
               </Panel>
-            </div>
-          ) : null}
-
-          {tab === "concorrente" ? (
-            <div className="space-y-3">
-              <Panel title="Analisar proposta do concorrente" hint="Equipamentos, quantidades e escopos separados · valores apenas igualados">
-                <p className="text-[11px] leading-relaxed text-steel">
-                  Envie até 6 arquivos do concorrente. A análise separa CFTV IP, Controle de Acesso e demais disciplinas,
-                  lê quantidades e valores e aplica os itens nesta proposta <b className="text-silver">sem desconto automático</b>.
-                  O texto atual do documento é preservado; o valor final fica editável na aba “Itens &amp; valores”.
-                </p>
-                {competitorFlash ? (
-                  <p role="status" className="rounded-lg border border-armed/30 bg-armed/5 p-2.5 text-[11px] leading-relaxed text-silver">
-                    {competitorFlash}
-                  </p>
-                ) : null}
-              </Panel>
-              <ReferencePanel
-                context={{
-                  type: proposal.type as "simples" | "completa" | "produtos_servicos",
-                  clientName: proposal.clientName,
-                  contact: proposal.contact ?? "",
-                  clientEmail: proposal.clientEmail ?? "",
-                  site: proposal.site ?? "",
-                  validityDays: proposal.validityDays,
-                }}
-                onAnalysisReady={applyReferenceAnalysis}
-              />
             </div>
           ) : null}
 

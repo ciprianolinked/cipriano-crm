@@ -79,25 +79,31 @@ function Body({ text }: { text: string }) {
 }
 
 function ItemsTable({ items }: { items: ProposalItem[] }) {
-  // Quando os itens têm escopo (CFTV IP, Controle de Acesso...), a tabela é
-  // separada por disciplina para o cliente comparar com clareza.
-  const scoped = [...new Set(items.map((item) => item.group).filter((group): group is string => Boolean(group)))];
-  const groups: { key: string; label: string }[] = scoped.length
-    ? scoped.map((group) => ({ key: group, label: group }))
-    : [
-        { key: "equipamento", label: "Equipamentos" },
-        { key: "servico", label: "Serviços" },
-      ];
-  const rowsOf = (key: string) =>
-    scoped.length ? items.filter((item) => item.group === key) : items.filter((item) => item.kind === key);
+  // Quando o item traz escopo (proposta igualada ao concorrente), agrupa por disciplina.
+  const hasScope = items.some((item) => Boolean(item.scope));
+  const groups: { key: string; label: string; rows: ProposalItem[] }[] = [];
+  if (hasScope) {
+    for (const item of items) {
+      const label = item.scope?.trim() || "Itens Complementares";
+      const key = `scope-${label}`;
+      const existing = groups.find((group) => group.key === key);
+      if (existing) existing.rows.push(item);
+      else groups.push({ key, label, rows: [item] });
+    }
+  } else {
+    groups.push(
+      { key: "equipamento", label: "Equipamentos", rows: items.filter((item) => item.kind === "equipamento") },
+      { key: "servico", label: "Serviços", rows: items.filter((item) => item.kind === "servico") },
+    );
+  }
   return (
     <>
       {groups.map((group) => {
-        const rows = rowsOf(group.key);
+        const rows = group.rows;
         if (rows.length === 0) return null;
-        const total = rows.reduce((a, i) => a + i.qty * i.price, 0);
+        const total = rows.reduce((acc, item) => acc + item.qty * item.price, 0);
         return (
-          <div key={group.key}>
+          <div key={group.key} style={{ marginTop: 6 }}>
             <div className="cip-group">{group.label}</div>
             <table className="cip-table">
               <thead>
@@ -123,7 +129,7 @@ function ItemsTable({ items }: { items: ProposalItem[] }) {
                   </tr>
                 ))}
                 <tr className="total">
-                  <td colSpan={4}>Subtotal {group.label.toLowerCase()}</td>
+                  <td colSpan={4}>Subtotal · {group.label}</td>
                   <td className="num">{brl(total)}</td>
                 </tr>
               </tbody>
@@ -134,6 +140,7 @@ function ItemsTable({ items }: { items: ProposalItem[] }) {
     </>
   );
 }
+
 
 function ConditionsBlock({
   section,
@@ -256,9 +263,9 @@ export function ProposalDocument({ proposal, settings }: { proposal: DocData; se
                 <table className="cip-table" style={{ marginTop: 4 }}>
                   <thead>
                     <tr>
-                      <th style={{ width: "44%" }}>Frente de trabalho</th>
-                      <th style={{ width: "28%" }}>Cipriano Tech &amp; Security</th>
-                      <th>Cliente</th>
+                      <th style={{ width: "38%" }}>{section.columns?.[0] ?? "Frente de trabalho"}</th>
+                      <th style={{ width: "40%" }}>{section.columns?.[1] ?? "Cipriano Tech & Security"}</th>
+                      <th>{section.columns?.[2] ?? "Cliente"}</th>
                     </tr>
                   </thead>
                   <tbody>

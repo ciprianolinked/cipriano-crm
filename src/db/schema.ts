@@ -180,6 +180,8 @@ export const referenceFiles = pgTable("reference_files", {
   extractedText: text("extracted_text"),
   /** Transcrição manual para PDFs escaneados e imagens sem camada de texto. */
   manualText: text("manual_text"),
+  /** Linhas de tabela reconstruídas pela posição das colunas do PDF. */
+  layoutRows: jsonb("layout_rows").$type<string[][]>(),
   analysis: jsonb("analysis").$type<ReferenceAnalysis>(),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { referenceFiles } from "@/db/schema";
+import { withReferenceSchema } from "@/lib/db-migrations";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,18 +10,24 @@ export const runtime = "nodejs";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Serve o arquivo original para leitura no navegador, sem indexar em buscadores. */
+const fail = (message: string, status = 500) =>
+  NextResponse.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } });
+
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Identificador inválido." }, { status: 400 });
-  const [row] = await db
-    .select({
-      fileName: referenceFiles.fileName,
-      mimeType: referenceFiles.mimeType,
-      data: referenceFiles.data,
-    })
-    .from(referenceFiles)
-    .where(eq(referenceFiles.id, id))
-    .limit(1);
+  const row = await withReferenceSchema(async () => {
+    const [found] = await db
+      .select({
+        fileName: referenceFiles.fileName,
+        mimeType: referenceFiles.mimeType,
+        data: referenceFiles.data,
+      })
+      .from(referenceFiles)
+      .where(eq(referenceFiles.id, id))
+      .limit(1);
+    return found;
+  });
   if (!row) return NextResponse.json({ error: "Arquivo não encontrado." }, { status: 404 });
 
   return new Response(new Uint8Array(row.data), {
@@ -55,11 +62,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   if (!Object.keys(patch).length) return NextResponse.json({ error: "Nada para atualizar." }, { status: 400 });
 
-  const [row] = await db
-    .update(referenceFiles)
-    .set(patch)
-    .where(eq(referenceFiles.id, id))
-    .returning({ id: referenceFiles.id });
+  const row = await withReferenceSchema(async () => {
+    const [updated] = await db
+      .update(referenceFiles)
+      .set(patch)
+      .where(eq(referenceFiles.id, id))
+      .returning({ id: referenceFiles.id });
+    return updated;
+  });
   if (!row) return NextResponse.json({ error: "Arquivo não encontrado." }, { status: 404 });
   return NextResponse.json({ ok: true, ...patch });
 }
@@ -67,7 +77,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Identificador inválido." }, { status: 400 });
-  const rows = await db.delete(referenceFiles).where(eq(referenceFiles.id, id)).returning({ id: referenceFiles.id });
+  const rows = await withReferenceSchema(() =>
+    db.delete(referenceFiles).where(eq(referenceFiles.id, id)).returning({ id: referenceFiles.id }),
+  );
   if (rows.length === 0) return NextResponse.json({ error: "Arquivo não encontrado." }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

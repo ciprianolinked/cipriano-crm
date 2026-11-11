@@ -75,6 +75,7 @@ export function ReferencePanel({
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState("");
   const [flash, setFlash] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [dragging, setDragging] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<Record<string, string>>({});
@@ -82,11 +83,13 @@ export function ReferencePanel({
   const controller = useRef<AbortController | null>(null);
 
   async function load() {
+    setLoadError("");
     try {
       const data = await fetchJson<{ files: ReferenceFile[] }>("/api/references");
       setFiles(data.files);
     } catch (err) {
-      setError(errorMessage(err));
+      // A lista não carregou, mas o painel continua utilizável para novo envio.
+      setLoadError(errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -253,6 +256,15 @@ export function ReferencePanel({
         </span>
       </div>
 
+      {loadError ? (
+        <div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-alarm/35 bg-alarm/5 p-3 text-[11.5px] leading-relaxed text-alarm">
+          <span className="flex gap-2"><AlertTriangle size={15} className="mt-0.5 shrink-0" />{loadError}</span>
+          <button type="button" className="btn px-2.5 py-1 text-[10.5px]" onClick={() => { setLoading(true); void load(); }}>
+            <RefreshCw size={12} /> Tentar carregar novamente
+          </button>
+        </div>
+      ) : null}
+
       <div
         onDragOver={(event) => {
           event.preventDefault();
@@ -321,7 +333,7 @@ export function ReferencePanel({
       <button
         type="button"
         className="btn btn-primary mt-4 w-full py-3"
-        disabled={analyzing || busy || !files.length}
+        disabled={analyzing || busy}
         onClick={() => void analyze()}
       >
         {analyzing ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />}
@@ -421,7 +433,7 @@ export function ReferencePanel({
             <LoaderCircle size={14} className="animate-spin" /> Carregando arquivos…
           </div>
         ) : null}
-        {!loading && !files.length ? (
+        {!loading && !files.length && !loadError ? (
           <div className="rounded-lg border border-line/50 bg-abyss2/30 p-4 text-center">
             <ScanText size={18} className="mx-auto text-steel/70" />
             <p className="mt-2 text-[11.5px] text-silver">Nenhuma proposta de concorrente enviada.</p>
