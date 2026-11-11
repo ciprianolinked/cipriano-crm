@@ -651,35 +651,23 @@ export function renderProposalPdf(pdf: jsPDF, doc: PdfProposalData, settings: Pd
     }
 
     if (section.kind === "table" && section.rows?.length) {
-      const columns = section.columns;
       sheet.table(
         [
-          { label: columns?.[0] ?? "Frente de trabalho", width: 74 },
-          { label: columns?.[1] ?? "Cipriano Tech & Security", width: 51 },
-          { label: columns?.[2] ?? "Cliente", width: 51 },
+          { label: "Frente de trabalho", width: 74 },
+          { label: "Cipriano Tech & Security", width: 51 },
+          { label: "Cliente", width: 51 },
         ],
         section.rows.map((row) => [row.label, row.cipriano, row.client]),
       );
     }
 
     if (section.kind === "items") {
-      const hasScope = doc.items.some((item) => Boolean(item.scope));
-      const scoped: { label: string; rows: ProposalItem[] }[] = [];
-      if (hasScope) {
-        for (const item of doc.items) {
-          const label = item.scope?.trim() || "Itens Complementares";
-          const existing = scoped.find((group) => group.label === label);
-          if (existing) existing.rows.push(item);
-          else scoped.push({ label, rows: [item] });
-        }
-      } else {
-        scoped.push(
-          { label: "EQUIPAMENTOS", rows: doc.items.filter((item) => item.kind === "equipamento") },
-          { label: "SERVIÇOS", rows: doc.items.filter((item) => item.kind === "servico") },
-        );
-      }
-      for (const group of scoped) {
-        const rows = group.rows;
+      const groups: { key: ProposalItem["kind"]; label: string }[] = [
+        { key: "equipamento", label: "EQUIPAMENTOS" },
+        { key: "servico", label: "SERVIÇOS" },
+      ];
+      for (const group of groups) {
+        const rows = doc.items.filter((item) => item.kind === group.key);
         if (!rows.length) continue;
         const subtotal = rows.reduce((sum, item) => sum + item.qty * item.price, 0);
         sheet.subheading(group.label);
@@ -692,7 +680,7 @@ export function renderProposalPdf(pdf: jsPDF, doc: PdfProposalData, settings: Pd
             { label: "Total", width: 36, align: "right" },
           ],
           rows.map((item) => [`${item.desc}${item.spec ? ` — ${item.spec}` : ""}`, item.unit, String(item.qty), brl(item.price), brl(item.price * item.qty)]),
-          ["", "", `Subtotal · ${group.label}`, "", brl(subtotal)],
+          ["", "", `Subtotal ${group.label.toLowerCase()}`, "", brl(subtotal)],
         );
       }
     }

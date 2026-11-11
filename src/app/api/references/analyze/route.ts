@@ -32,7 +32,6 @@ export async function POST(request: Request) {
       mimeType: referenceFiles.mimeType,
       extractedText: referenceFiles.extractedText,
       manualText: referenceFiles.manualText,
-      layoutRows: referenceFiles.layoutRows,
       note: referenceFiles.note,
       analysis: referenceFiles.analysis,
     })
@@ -54,8 +53,6 @@ export async function POST(request: Request) {
     manualText: row.manualText,
     note: row.note,
     pages: isTextReference(row.mimeType) ? null : (row.analysis?.pages ?? null),
-    // Quando há transcrição manual, ela manda; senão usamos as colunas reconstruídas do PDF.
-    layoutRows: row.manualText?.trim() ? null : (row.layoutRows ?? row.analysis?.layoutRows ?? null),
   }));
 
   const analysis = analyzeCompetitorDocuments(documents);

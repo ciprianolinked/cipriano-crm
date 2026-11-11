@@ -165,7 +165,6 @@ CREATE TABLE IF NOT EXISTS public.reference_files (
   data bytea NOT NULL,
   extracted_text text,
   manual_text text,
-  layout_rows jsonb,
   analysis jsonb,
   note text,
   created_at timestamptz DEFAULT now() NOT NULL
@@ -199,7 +198,6 @@ ALTER TABLE public.maintenance_contracts ADD COLUMN IF NOT EXISTS contract_kind 
 ALTER TABLE public.maintenance_contracts ADD COLUMN IF NOT EXISTS contract_value_cents integer DEFAULT 0 NOT NULL;
 -- Transcrição manual de propostas de concorrente sem camada de texto.
 ALTER TABLE public.reference_files ADD COLUMN IF NOT EXISTS manual_text text;
-ALTER TABLE public.reference_files ADD COLUMN IF NOT EXISTS layout_rows jsonb;
 
 -- Complementa instalações antigas. ADD COLUMN IF NOT EXISTS não recria
 -- nem sobrescreve uma coluna existente. Todos os campos novos têm default
