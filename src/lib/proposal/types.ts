@@ -12,6 +12,8 @@ export type ProposalItem = {
   unit: string;
   qty: number;
   price: number;
+  /** Disciplina/escopo do item (CFTV IP, Controle de Acesso...). */
+  scope?: string;
 };
 
 export type SectionKind = "text" | "table" | "items" | "totals" | "terms";
@@ -25,6 +27,8 @@ export type ProposalSection = {
   enabled: boolean;
   kind?: SectionKind;
   rows?: SectionTableRow[];
+  /** Cabeçalho próprio para tabelas de resumo por escopo. */
+  columns?: string[];
   locked?: boolean;
 };
 

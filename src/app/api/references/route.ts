@@ -69,8 +69,8 @@ export async function POST(request: Request) {
 
   const note = String(form.get("note") ?? "").trim().slice(0, 1000);
   const bytes = Buffer.from(await file.arrayBuffer());
-  const { text, pages } = await extractReference(bytes, file.type);
-  const analysis = analyzeReferenceText(text, pages);
+  const { text, pages, layoutRows } = await extractReference(bytes, file.type);
+  const analysis = { ...analyzeReferenceText(text, pages), layoutRows: layoutRows.slice(0, 900) };
 
   try {
     const rows = await db.transaction(async (tx) => {
@@ -84,6 +84,7 @@ export async function POST(request: Request) {
           sizeBytes: bytes.length,
           data: bytes,
           extractedText: text || null,
+          layoutRows: layoutRows.length ? layoutRows.slice(0, 900) : null,
           analysis,
           note: note || null,
         })
