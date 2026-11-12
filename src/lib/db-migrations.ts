@@ -76,6 +76,23 @@ const MIGRATIONS: string[] = [
     note text NOT NULL DEFAULT '',
     created_at timestamptz DEFAULT now() NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS reference_files (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+    file_name text NOT NULL,
+    mime_type text NOT NULL,
+    size_bytes integer NOT NULL,
+    data bytea NOT NULL,
+    extracted_text text,
+    manual_text text,
+    layout_rows jsonb,
+    analysis jsonb,
+    note text,
+    created_at timestamptz DEFAULT now() NOT NULL
+  )`,
+  `ALTER TABLE reference_files ADD COLUMN IF NOT EXISTS manual_text text`,
+  `ALTER TABLE reference_files ADD COLUMN IF NOT EXISTS layout_rows jsonb`,
+  `ALTER TABLE maintenance_contracts ADD COLUMN IF NOT EXISTS contract_kind text DEFAULT 'manutencao' NOT NULL`,
+  `ALTER TABLE maintenance_contracts ADD COLUMN IF NOT EXISTS contract_value_cents integer DEFAULT 0 NOT NULL`,
 ];
 
 /**

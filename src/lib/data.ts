@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, like, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, appSettings, catalogItems, clients, proposals } from "@/db/schema";
 import type { ActivityRow, CatalogRow, ClientRow, ProposalRow, SettingsRow } from "@/db/schema";
@@ -64,16 +64,33 @@ export async function ensureBootstrap() {
   await bootstrapped;
 }
 
+export async function getHighestProposalSequence(year: number = new Date().getFullYear()): Promise<number> {
+  const prefix = `CTS-${year}-`;
+  const allInYear = await db
+    .select({ number: proposals.number })
+    .from(proposals)
+    .where(like(proposals.number, `${prefix}%`));
+  let maxSeq = 0;
+  for (const row of allInYear) {
+    const match = row.number.match(/CTS-\d{4}-(\d+)/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (Number.isFinite(num) && num > maxSeq) maxSeq = num;
+    }
+  }
+  return maxSeq;
+}
+
 export async function nextProposalNumber(): Promise<string> {
   const settings = await getSettings();
   const year = new Date().getFullYear();
-  const [updated] = await db
+  const maxSeq = await getHighestProposalSequence(year);
+  const nextSeq = maxSeq + 1;
+  await db
     .update(appSettings)
-    .set({ proposalCounter: settings.proposalCounter + 1, updatedAt: new Date() })
-    .where(eq(appSettings.id, settings.id))
-    .returning();
-  const seqNumber = updated?.proposalCounter ?? settings.proposalCounter + 1;
-  return `CTS-${year}-${String(seqNumber).padStart(4, "0")}`;
+    .set({ proposalCounter: nextSeq, updatedAt: new Date() })
+    .where(eq(appSettings.id, settings.id));
+  return `CTS-${year}-${String(nextSeq).padStart(4, "0")}`;
 }
 
 export async function listClients(): Promise<ClientRow[]> {

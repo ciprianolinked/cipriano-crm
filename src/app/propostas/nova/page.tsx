@@ -1,4 +1,4 @@
-import { ensureBootstrap, listClients } from "@/lib/data";
+import { ensureBootstrap, listCatalog, listClients } from "@/lib/data";
 import { NewProposalWizard } from "@/components/proposal/NewProposalWizard";
 import { loadDatabasePage } from "@/components/system/load-database-page";
 
@@ -7,10 +7,11 @@ export const dynamic = "force-dynamic";
 export default async function NewProposalPage() {
   const loaded = await loadDatabasePage(async () => {
     await ensureBootstrap();
-    return listClients();
+    const [clients, catalog] = await Promise.all([listClients(), listCatalog()]);
+    return { clients, catalog };
   });
   if (!loaded.ok) return loaded.recovery;
-  const clients = loaded.data;
+  const { clients, catalog } = loaded.data;
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-5 lg:px-7 lg:py-7">
       <header className="border-b border-line/50 pb-4">
@@ -34,6 +35,15 @@ export default async function NewProposalPage() {
             address: c.address,
             city: c.city,
             state: c.state,
+          }))}
+          catalog={catalog.map((i) => ({
+            id: i.id,
+            kind: i.kind,
+            category: i.category,
+            description: i.description,
+            spec: i.spec,
+            unit: i.unit,
+            priceCents: i.priceCents,
           }))}
         />
       </div>

@@ -336,15 +336,19 @@ export function ProposalDocument({ proposal, settings }: { proposal: DocData; se
 
             {section.id === "aceite" ? (
               <div className="cip-sign">
-                <div className="cip-sign-line">{settings.legalName} · {settings.director}</div>
-                <div className="cip-sign-line">{proposal.clientName} · responsável pelo aceite</div>
+                <div className="cip-sign-line">
+                  {(proposal.briefing?.ciprianoSignatory as string) || `${settings.legalName} · ${settings.director}`}
+                </div>
+                <div className="cip-sign-line">
+                  {(proposal.briefing?.clientSignatory as string) || `${proposal.clientName} · responsável pelo aceite`}
+                </div>
               </div>
             ) : null}
           </section>
         ))}
 
         <div className="cip-seal">
-          {["CFTV IP", "Controle de acesso", "Cerca elétrica", "Monitoramento 24h", "LGPD"].map((tag) => (
+          {((proposal.briefing?.sealTags as string[]) || ["CFTV IP", "Controle de acesso", "Cerca elétrica", "Monitoramento 24h", "LGPD"]).map((tag) => (
             <span key={tag}>{tag}</span>
           ))}
         </div>

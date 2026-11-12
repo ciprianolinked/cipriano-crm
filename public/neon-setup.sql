@@ -88,6 +88,20 @@ CREATE TABLE IF NOT EXISTS public.catalog_items (
   created_at timestamptz DEFAULT now() NOT NULL
 );
 
+-- Histórico de revisão de preços do fornecedor (justificativa de reajustes).
+CREATE TABLE IF NOT EXISTS public.catalog_price_revisions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  item_id uuid NOT NULL,
+  item_description text NOT NULL,
+  old_supplier_cents integer DEFAULT 0 NOT NULL,
+  new_supplier_cents integer DEFAULT 0 NOT NULL,
+  old_sale_cents integer DEFAULT 0 NOT NULL,
+  new_sale_cents integer DEFAULT 0 NOT NULL,
+  margin_pct integer DEFAULT 0 NOT NULL,
+  note text,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS public.maintenance_contracts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   client_id uuid,
@@ -246,13 +260,13 @@ ON CONFLICT (id) DO NOTHING;
 
 COMMIT;
 
--- Confirmação: o resultado deve ser 11 no database selecionado.
+-- Confirmação: o resultado deve ser 12 no database selecionado.
 SELECT count(*) AS tabelas_do_aplicativo, current_database() AS database_atual
 FROM pg_tables
 WHERE schemaname = 'public'
   AND tablename IN (
     'clients', 'proposals', 'activities', 'catalog_items',
-    'maintenance_contracts', 'maintenance_readjusts',
-    'maintenance_document_revisions', 'ipca_history',
-    'economic_index_values', 'reference_files', 'app_settings'
+    'catalog_price_revisions', 'maintenance_contracts',
+    'maintenance_readjusts', 'maintenance_document_revisions',
+    'ipca_history', 'economic_index_values', 'reference_files', 'app_settings'
   );

@@ -715,7 +715,7 @@ export function renderProposalPdf(pdf: jsPDF, doc: PdfProposalData, settings: Pd
     if (section.id === "aceite") {
       sheet.signatures(`${settings.legalName}  |  ${settings.director}`, `${doc.clientName}  |  Responsável pelo aceite`);
     }
-    sheet.space(1.5);
+    sheet.space(4.2);
   });
 
   sheet.seal(["CFTV IP", "CONTROLE DE ACESSO", "CERCA ELÉTRICA", "MONITORAMENTO 24H", "LGPD"]);

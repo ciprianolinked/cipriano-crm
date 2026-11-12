@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   integer,
   jsonb,
   pgTable,
@@ -9,6 +10,12 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { ProposalItem, ProposalSection } from "@/lib/proposal/types";
+import type { ReferenceAnalysis } from "@/lib/references";
+
+/** PostgreSQL bytea — driver node-postgres already converts Buffer to/from bytea. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
 
 export const clients = pgTable("clients", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -201,6 +208,23 @@ export const appSettings = pgTable("app_settings", {
   proposalCounter: integer("proposal_counter").notNull().default(0),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/** Propostas de concorrentes enviadas como referência de equalização (máx. 6). */
+export const referenceFiles = pgTable("reference_files", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  data: bytea("data").notNull(),
+  extractedText: text("extracted_text"),
+  manualText: text("manual_text"),
+  layoutRows: jsonb("layout_rows").$type<string[][]>(),
+  analysis: jsonb("analysis").$type<ReferenceAnalysis>(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ReferenceFileRow = typeof referenceFiles.$inferSelect;
 
 export type ClientRow = typeof clients.$inferSelect;
 export type ProposalRow = typeof proposals.$inferSelect;

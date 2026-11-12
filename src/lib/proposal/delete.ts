@@ -1,6 +1,6 @@
-import { eq, inArray, or } from "drizzle-orm";
+import { eq, inArray, like, or } from "drizzle-orm";
 import { db } from "@/db";
-import { activities, maintenanceContracts, proposals } from "@/db/schema";
+import { activities, appSettings, maintenanceContracts, proposals } from "@/db/schema";
 
 export type DeleteProposalFamilyResult = {
   deletedCount: number;
@@ -26,6 +26,27 @@ export async function deleteProposalFamily(id: string): Promise<DeleteProposalFa
       .returning({ id: maintenanceContracts.id });
     await tx.delete(activities).where(inArray(activities.proposalId, ids));
     const deleted = await tx.delete(proposals).where(inArray(proposals.id, ids)).returning({ id: proposals.id });
+
+    // Recalcula o maior número de proposta existente no ano atual para não pular numeração
+    const year = new Date().getFullYear();
+    const prefix = `CTS-${year}-`;
+    const remaining = await tx
+      .select({ number: proposals.number })
+      .from(proposals)
+      .where(like(proposals.number, `${prefix}%`));
+    let maxSeq = 0;
+    for (const row of remaining) {
+      const match = row.number.match(/CTS-\d{4}-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (Number.isFinite(num) && num > maxSeq) maxSeq = num;
+      }
+    }
+    await tx
+      .update(appSettings)
+      .set({ proposalCounter: maxSeq, updatedAt: new Date() })
+      .where(eq(appSettings.id, "default"));
+
     return { deletedCount: deleted.length, deletedIds: deleted.map((row) => row.id), preservedContractCount: preserved.length };
   });
 }

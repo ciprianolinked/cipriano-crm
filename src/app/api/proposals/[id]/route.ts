@@ -77,6 +77,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.nextActionAt === null) patch.nextActionAt = null;
   else if (typeof body.nextActionAt === "string" && body.nextActionAt) patch.nextActionAt = new Date(body.nextActionAt);
   if ("clientId" in body) patch.clientId = body.clientId || null;
+  if ("number" in body && typeof body.number === "string" && body.number.trim()) {
+    patch.number = body.number.trim();
+  }
+  if ("issuedAt" in body && (typeof body.issuedAt === "string" || typeof body.issuedAt === "number" || body.issuedAt instanceof Date)) {
+    const parsed = new Date(body.issuedAt);
+    if (!Number.isNaN(parsed.getTime())) patch.issuedAt = parsed;
+  }
 
   const existing = await db.select().from(proposals).where(eq(proposals.id, id)).limit(1);
   if (existing.length === 0) return NextResponse.json({ error: "Proposta não encontrada." }, { status: 404 });

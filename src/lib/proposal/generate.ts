@@ -58,7 +58,80 @@ const section = (
 
 const bullets = (list: string[]) => list.filter(Boolean).map((l) => `• ${l}`).join("\n");
 
-export function buildItems(briefing: Briefing, type: ProposalType, artIncluded: boolean): ProposalItem[] {
+/**
+ * Aplica o cálculo padrão da Cipriano em propostas de fornecimento e instalação:
+ * 1. Miscelâneas, infraestrutura e margem de segurança (% sobre o subtotal dos equipamentos).
+ * 2. Mão de obra técnica especializada (ajustada para cada proposta).
+ */
+export function applyMiscAndLabor(
+  items: ProposalItem[],
+  miscPct = 10,
+  customLabor?: number,
+): ProposalItem[] {
+  const isMisc = (desc: string) => /miscel[aâ]nia|miscelanea/i.test(desc);
+  const isLabor = (desc: string) =>
+    /m[aã]o de obra técnica especializada|instala[çc][aã]o, configura[çc][aã]o e comissionamento/i.test(desc);
+
+  // Isola os itens sem duplicar miscelânea ou mão de obra anterior
+  const cleanItems = items.filter((it) => !isMisc(it.desc) && !isLabor(it.desc));
+  const equipmentItems = cleanItems.filter((it) => it.kind === "equipamento");
+  const equipSubtotal = equipmentItems.reduce((acc, it) => acc + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
+
+  const pct = Math.max(0, Math.min(100, miscPct));
+  const miscPrice = Math.round(equipSubtotal * (pct / 100) * 100) / 100;
+
+  const result: ProposalItem[] = [...cleanItems];
+
+  // Adiciona item de miscelâneas e infraestrutura se houver equipamentos
+  if (equipSubtotal > 0 || pct > 0) {
+    result.push({
+      id: uid("misc"),
+      kind: "equipamento",
+      desc: "Miscelâneas, infraestrutura e margem de segurança",
+      spec: `Eletrodutos, conectores RJ45, patch cords, caixas de passagem, abraçadeiras, parafusos, buchas, fusíveis, insumos de instalação e reserva técnica (${pct}% sobre equipamentos)`,
+      unit: "vb",
+      qty: 1,
+      price: miscPrice,
+      scope: "Rede e Infraestrutura",
+    });
+  }
+
+  // Mão de obra técnica especializada de acordo com cada proposta
+  const points = Math.max(1, equipmentItems.reduce((acc, it) => acc + (Number(it.qty) || 1), 0));
+  const laborPrice =
+    customLabor !== undefined && customLabor >= 0
+      ? customLabor
+      : Math.max(1200, points * 280);
+
+  result.push({
+    id: uid("labor"),
+    kind: "servico",
+    desc: "Mão de obra técnica especializada (instalação e comissionamento)",
+    spec: "Lançamento e conectorização de cabos, fixação e alinhamento de equipamentos, montagem de infraestrutura, configuração lógica, testes e entrega técnica",
+    unit: "vb",
+    qty: 1,
+    price: Math.round(laborPrice * 100) / 100,
+    scope: "Projeto e Serviços Técnicos",
+  });
+
+  return result;
+}
+
+export function buildItems(
+  briefing: Briefing,
+  type: ProposalType,
+  artIncluded: boolean,
+  options?: {
+    miscPct?: number;
+    laborPrice?: number;
+    customItems?: ProposalItem[];
+  },
+): ProposalItem[] {
+  // Se o usuário já selecionou produtos do catálogo diretamente no wizard, utiliza-os como base
+  if (options?.customItems && options.customItems.length > 0) {
+    return applyMiscAndLabor(options.customItems, options.miscPct ?? 10, options.laborPrice);
+  }
+
   const items: ProposalItem[] = [];
   const points = Math.max(
     1,
@@ -222,7 +295,7 @@ export function buildItems(briefing: Briefing, type: ProposalType, artIncluded: 
     }
   }
 
-  return items;
+  return applyMiscAndLabor(items, options?.miscPct ?? 10, options?.laborPrice);
 }
 
 function scopeList(briefing: Briefing, artIncluded: boolean): string[] {
@@ -568,6 +641,9 @@ export function generateProposal(input: {
   validityDays?: number;
   discountPct?: number;
   artIncluded?: boolean;
+  miscPct?: number;
+  laborPrice?: number;
+  customItems?: ProposalItem[];
   settings?: Partial<GeneratorSettings>;
 }): ProposalDraft {
   const settings = { ...defaultGeneratorSettings, ...input.settings };
@@ -578,7 +654,11 @@ export function generateProposal(input: {
   const discountPct = input.discountPct ?? suggestDiscount(briefing, input.type);
   const deliveryTime = settings.defaultDeliveryTime;
   const warranty = settings.defaultWarranty;
-  const items = buildItems(briefing, input.type, artIncluded);
+  const items = buildItems(briefing, input.type, artIncluded, {
+    miscPct: input.miscPct,
+    laborPrice: input.laborPrice,
+    customItems: input.customItems,
+  });
   const sections = buildSections({
     type: input.type,
     briefing,

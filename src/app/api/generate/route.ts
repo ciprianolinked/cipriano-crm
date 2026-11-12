@@ -4,11 +4,24 @@ import { getSettings } from "@/lib/data";
 import { calcTotals, defaultBriefing } from "@/lib/proposal/catalog";
 import { generateProposal } from "@/lib/proposal/generate";
 import { validateMaintenancePlan } from "@/lib/proposal/maintenance-plan";
-import { isProposalType, type Briefing } from "@/lib/proposal/types";
+import { isProposalType, type Briefing, type ProposalItem } from "@/lib/proposal/types";
 
 export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
-  const body = (await request.json()) as { type?: string; briefing?: Partial<Briefing> & { rawNotes?: string }; clientName?: string; contact?: string; clientEmail?: string; site?: string; validityDays?: number; artIncluded?: boolean; polish?: boolean };
+  const body = (await request.json()) as {
+    type?: string;
+    briefing?: Partial<Briefing> & { rawNotes?: string };
+    clientName?: string;
+    contact?: string;
+    clientEmail?: string;
+    site?: string;
+    validityDays?: number;
+    artIncluded?: boolean;
+    polish?: boolean;
+    miscPct?: number;
+    laborPrice?: number;
+    customItems?: ProposalItem[];
+  };
   if (!String(body.clientName ?? "").trim()) return NextResponse.json({ error: "Informe o nome do cliente." }, { status: 400 });
   const settings = await getSettings();
   const type = body.type && isProposalType(body.type) ? body.type : "completa";
@@ -21,7 +34,20 @@ export async function POST(request: Request) {
     const rawNotes = body.briefing?.rawNotes ?? briefing.notes;
     if (rawNotes.trim()) briefing = analyzeBriefingNotes(rawNotes, briefing);
   }
-  const draft = generateProposal({ type, briefing, clientName: String(body.clientName).trim(), contact: body.contact ?? "", clientEmail: body.clientEmail ?? "", site: body.site ?? "", validityDays: body.validityDays ?? settings.defaultValidityDays, artIncluded: maintenance ? false : body.artIncluded ?? type === "completa", settings });
+  const draft = generateProposal({
+    type,
+    briefing,
+    clientName: String(body.clientName).trim(),
+    contact: body.contact ?? "",
+    clientEmail: body.clientEmail ?? "",
+    site: body.site ?? "",
+    validityDays: body.validityDays ?? settings.defaultValidityDays,
+    artIncluded: maintenance ? false : body.artIncluded ?? type === "completa",
+    miscPct: body.miscPct,
+    laborPrice: body.laborPrice,
+    customItems: body.customItems,
+    settings,
+  });
   let aiNote = maintenance
     ? "Minuta estruturada de manutenção gerada com os valores, cobertura, visitas e prazos que você informou. Confira antes de enviar."
     : "Proposta estruturada com o briefing informado. Revise os itens e as condições antes de enviar.";

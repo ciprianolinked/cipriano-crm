@@ -6,7 +6,8 @@ import { useMemo, useState } from "react";
 import { brl, fmtDate, fmtDateTime } from "@/lib/brand";
 import { calcTotals } from "@/lib/proposal/catalog";
 import { STAGES, type ProposalItem, type ProposalSection } from "@/lib/proposal/types";
-import { SECTION_LIBRARY } from "@/lib/proposal/generate";
+import { applyMiscAndLabor, SECTION_LIBRARY } from "@/lib/proposal/generate";
+import type { ProposalType, SectionTableRow } from "@/lib/proposal/types";
 import { ProposalDocument, type DocData, type DocSettings } from "@/components/proposal/ProposalDocument";
 import { PrintActions } from "@/components/proposal/PrintActions";
 import { ProposalDeleteButton } from "@/components/proposal/ProposalDeleteButton";
@@ -83,10 +84,51 @@ export function ProposalEditor({
   const [catalogPick, setCatalogPick] = useState("");
   const [revisions, setRevisions] = useState<EditorRevision[]>(initialRevisions);
   const [revisionBusy, setRevisionBusy] = useState(false);
+  const [editorMiscPct, setEditorMiscPct] = useState(10);
+  const [editorLaborPrice, setEditorLaborPrice] = useState<number | "">("");
 
   const totals = useMemo(() => calcTotals(proposal.items, proposal.discountPct), [proposal.items, proposal.discountPct]);
   const maintenanceProposal = isMaintenanceProposal(proposal.briefing);
   const monthly = maintenanceSummary(proposal.items, proposal.discountPct, proposal.briefing);
+
+  const equipSubtotal = useMemo(() => {
+    return proposal.items
+      .filter((it) => it.kind === "equipamento" && !/miscel[aâ]nia|miscelanea/i.test(it.desc))
+      .reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
+  }, [proposal.items]);
+
+  const miscEstimated = Math.round(equipSubtotal * (editorMiscPct / 100) * 100) / 100;
+
+  function handleApplyMiscAndLabor() {
+    const updated = applyMiscAndLabor(
+      proposal.items,
+      editorMiscPct,
+      typeof editorLaborPrice === "number" && editorLaborPrice >= 0 ? editorLaborPrice : undefined,
+    );
+    update({ items: updated });
+  }
+
+  function patchSectionRow(sectionId: string, rowIndex: number, patch: Partial<SectionTableRow>) {
+    const section = proposal.sections.find((s) => s.id === sectionId);
+    if (!section || !section.rows) return;
+    const nextRows = section.rows.map((r, i) => (i === rowIndex ? { ...r, ...patch } : r));
+    patchSection(sectionId, { rows: nextRows });
+  }
+
+  function addSectionRow(sectionId: string) {
+    const section = proposal.sections.find((s) => s.id === sectionId);
+    if (!section) return;
+    const currentRows = section.rows ?? [];
+    patchSection(sectionId, {
+      rows: [...currentRows, { label: "Nova frente", cipriano: "Escopo Cipriano", client: "Responsabilidade cliente" }],
+    });
+  }
+
+  function removeSectionRow(sectionId: string, rowIndex: number) {
+    const section = proposal.sections.find((s) => s.id === sectionId);
+    if (!section || !section.rows) return;
+    patchSection(sectionId, { rows: section.rows.filter((_, i) => i !== rowIndex) });
+  }
 
   function update(patch: Partial<EditorProposal>) {
     setProposal((prev) => ({ ...prev, ...patch }));
