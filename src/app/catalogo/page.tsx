@@ -1,16 +1,11 @@
 import { ensureBootstrap, listCatalog } from "@/lib/data";
 import { CatalogManager } from "@/components/catalog/CatalogManager";
-import { loadDatabasePage } from "@/components/system/load-database-page";
 
 export const dynamic = "force-dynamic";
 
 export default async function CatalogPage() {
-  const loaded = await loadDatabasePage(async () => {
-    await ensureBootstrap();
-    return listCatalog();
-  });
-  if (!loaded.ok) return loaded.recovery;
-  const items = loaded.data;
+  await ensureBootstrap();
+  const items = await listCatalog();
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-5 lg:px-7 lg:py-7">
       <header className="border-b border-line/50 pb-4">
@@ -19,8 +14,8 @@ export default async function CatalogPage() {
           Catálogo de equipamentos e serviços
         </h1>
         <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-steel">
-          Preço e especificação padronizados. Alterou aqui, a próxima proposta já sai atualizada — é a forma mais rápida
-          de parar de redigitar escopo.
+          Preço do fornecedor + margem (BDI/markup) calculam o preço de venda. Insira um anexo do
+          fornecedor para a IA extrair os itens automaticamente.
         </p>
       </header>
       <div className="mt-4">

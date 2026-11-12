@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { catalogItems } from "@/db/schema";
+import { catalogItems, catalogPriceRevisions } from "@/db/schema";
 import { ensureBootstrap, listCatalog } from "@/lib/data";
 import { salePriceFromSupplier } from "@/lib/proposal/catalog";
 
@@ -14,25 +14,42 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const body = (await request.json()) as Record<string, unknown>;
-  const description = String(body.description ?? "").trim();
-  if (!description) return NextResponse.json({ error: "Descrição é obrigatória." }, { status: 400 });
-  const supplierPrice = Math.round((Number(body.supplierPrice ?? body.price ?? 0) || 0) * 100);
-  const margin = Math.max(0, Math.min(100, Number(body.margin ?? body.marginPct ?? 30)));
-  const priceCents = salePriceFromSupplier(supplierPrice, margin);
-  const [row] = await db
-    .insert(catalogItems)
-    .values({
-      kind: String(body.kind ?? "equipamento"),
-      category: String(body.category ?? "CFTV"),
-      description,
-      spec: String(body.spec ?? ""),
-      unit: String(body.unit ?? "un"),
-      supplierPriceCents: supplierPrice,
-      marginPct: margin,
-      priceCents,
-    })
-    .returning();
-  return NextResponse.json({ item: row }, { status: 201 });
+
+  // Suporta um item único ou uma lista de itens extraídos por IA (anexo).
+  const single = body.items === undefined;
+  const rawItems = single ? [body] : (Array.isArray(body.items) ? (body.items as Record<string, unknown>[]) : []);
+
+  if (!rawItems.length) {
+    return NextResponse.json({ error: "Informe ao menos um item." }, { status: 400 });
+  }
+
+  const inserted = [];
+  for (const item of rawItems) {
+    const description = String(item.description ?? "").trim();
+    if (!description) continue;
+    const supplierPrice = Math.round((Number(item.supplierPrice ?? item.price ?? 0) || 0) * 100);
+    const margin = Math.max(0, Math.min(100, Number(item.margin ?? item.marginPct ?? 30)));
+    const priceCents = salePriceFromSupplier(supplierPrice, margin);
+    const row = await db
+      .insert(catalogItems)
+      .values({
+        kind: String(item.kind ?? "equipamento"),
+        category: String(item.category ?? "CFTV"),
+        description,
+        spec: String(item.spec ?? ""),
+        unit: String(item.unit ?? "un"),
+        supplierPriceCents: supplierPrice,
+        marginPct: margin,
+        priceCents: priceCents,
+      })
+      .returning();
+    inserted.push(row);
+  }
+
+  if (!inserted.length) {
+    return NextResponse.json({ error: "Nenhum item válido para adicionar." }, { status: 400 });
+  }
+  return NextResponse.json({ items: inserted }, { status: 201 });
 }
 
 export async function PATCH(request: Request) {

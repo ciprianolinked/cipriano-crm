@@ -9,15 +9,19 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@types/pdf-parse": "^1.1.5",
     "dotenv": "17.3.1",
     "drizzle-orm": "0.45.2",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.70.0",
     "next": "16.2.6",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^4.10.38",
     "pg": "8.20.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",
+    "tesseract.js": "^7.0.0",
     "unpdf": "^1.9.1"
   },
   "devDependencies": {
