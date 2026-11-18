@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const polished = await maybePolishWithLLM({
     system:
       "Você escreve blocos de proposta comercial da Cipriano Tech & Security (segurança eletrônica IP). Português do Brasil, tom técnico e calmo, bullets objetivos, números antes de adjetivos, sem superlativos. Responda apenas com o texto final do bloco.",
-    prompt: `Bloco: ${title}\nCliente: ${clientName || "a definir"}\nSegmento: ${briefing.segment}\nEscopo: ${briefing.cameras} câmeras, ${briefing.doors} portas, ${briefing.fenceMeters} m de cerca, alarme ${briefing.alarm ? "sim" : "não"}, monitoramento ${briefing.monitoring ? "sim" : "não"}.\nContexto adicional: ${body.context ?? "nenhum"}\n\nRascunho base:\n${local}`,
+    prompt: `Bloco: ${title}\nCliente: ${clientName || "a definir"}\nSegmento: ${briefing.segment}\nEscopo: ${briefing.cameras} câmeras, ${briefing.doors} portas, ${briefing.fenceMeters} m de cerca, alarme ${briefing.alarm ? "sim" : "não"}.\nContexto adicional: ${body.context ?? "nenhum"}\n\nRascunho base:\n${local}`,
   });
 
   return NextResponse.json({

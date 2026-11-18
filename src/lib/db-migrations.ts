@@ -89,6 +89,31 @@ const MIGRATIONS: string[] = [
     note text,
     created_at timestamptz DEFAULT now() NOT NULL
   )`,
+  `ALTER TABLE reference_files ADD COLUMN IF NOT EXISTS manual_text text`,
+  `ALTER TABLE reference_files ADD COLUMN IF NOT EXISTS layout_rows jsonb`,
+  `ALTER TABLE maintenance_contracts ADD COLUMN IF NOT EXISTS contract_kind text DEFAULT 'manutencao' NOT NULL`,
+  `ALTER TABLE maintenance_contracts ADD COLUMN IF NOT EXISTS contract_value_cents integer DEFAULT 0 NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS delivery_terms (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+    proposal_id uuid,
+    term_number text NOT NULL,
+    client_name text NOT NULL,
+    site text,
+    delivery_date timestamptz,
+    technician text NOT NULL DEFAULT '',
+    receiver_name text NOT NULL DEFAULT '',
+    receiver_doc text NOT NULL DEFAULT '',
+    items jsonb NOT NULL DEFAULT '[]'::jsonb,
+    intro text NOT NULL DEFAULT '',
+    scope_summary text NOT NULL DEFAULT '',
+    tests text NOT NULL DEFAULT '',
+    pendencies text NOT NULL DEFAULT '',
+    warranty text NOT NULL DEFAULT '',
+    observations text NOT NULL DEFAULT '',
+    status text NOT NULL DEFAULT 'rascunho',
+    created_at timestamptz DEFAULT now() NOT NULL,
+    updated_at timestamptz DEFAULT now() NOT NULL
+  )`,
 ];
 
 /**

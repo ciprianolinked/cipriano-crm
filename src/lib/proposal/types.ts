@@ -4,9 +4,6 @@ export type ProposalStage = "novo" | "enviada" | "negociacao" | "ganho" | "perdi
 
 export type ItemKind = "equipamento" | "servico";
 
-/** Adicionais fixos de todo projeto: miscelâneas, infraestrutura, margem de segurança e mão de obra. */
-export type AutoItemKey = "misc" | "infra" | "safety" | "labor";
-
 export type ProposalItem = {
   id: string;
   kind: ItemKind;
@@ -17,10 +14,8 @@ export type ProposalItem = {
   price: number;
   /** Disciplina/escopo do item (CFTV IP, Controle de Acesso...). */
   scope?: string;
-  /** Item calculado automaticamente pelos adicionais do projeto (ver extras.ts). */
-  auto?: AutoItemKey;
-  /** Percentual aplicado sobre o valor dos equipamentos (miscelâneas, infraestrutura, margem). */
-  pct?: number;
+  /** Item calculado automaticamente (ex.: custos indiretos sobre equipamentos). */
+  auto?: "indirect";
 };
 
 export type SectionKind = "text" | "table" | "items" | "totals" | "terms";
@@ -37,6 +32,38 @@ export type ProposalSection = {
   /** Cabeçalho próprio para tabelas de resumo por escopo. */
   columns?: string[];
   locked?: boolean;
+};
+
+/** Todos os textos do bloco VALOR são editáveis por proposta. Campos vazios usam o padrão. */
+export type ValueBlockConfig = {
+  primaryLabel?: string;
+  primaryNote?: string;
+  resumoLabel?: string;
+  subtotalLabel?: string;
+  discountLabel?: string;
+  installmentLabel?: string;
+  /** Parcelamento sem juros no cartão: 1 a 60 vezes. */
+  installments?: number;
+  /** Percentual de entrada na assinatura (0 a 100). O restante é pago na entrega técnica. */
+  entryPct?: number;
+  paymentTitle?: string;
+  entryLabel?: string;
+  balanceLabel?: string;
+  cardLabel?: string;
+  paymentLabel?: string;
+  deadlineLabel?: string;
+  warrantyLabel?: string;
+  validityLabel?: string;
+};
+
+/** Opção de comodato: equipamentos cedidos ao cliente mediante mensalidade. */
+export type ComodatoConfig = {
+  enabled: boolean;
+  termMonths: number;
+  /** null = mensalidade automática (valor dos equipamentos ÷ prazo). */
+  monthlyCents: number | null;
+  /** Valor para aquisição dos equipamentos ao final do prazo (opcional). */
+  residualCents: number;
 };
 
 export type MaintenancePlan = {
@@ -59,12 +86,11 @@ export type Briefing = {
   purpose?: "projeto" | "manutencao_mensal";
   maintenancePlan?: MaintenancePlan;
   wantsContract?: boolean;
-  /** Número de parcelas exibido no resumo; pode ser personalizado por proposta. */
-  paymentInstallments?: number;
   segment: string;
   cameras: number;
   doors: number;
   fenceMeters: number;
+  /** @deprecated A empresa não oferece monitoramento 24h. Mantido por compatibilidade; sempre falso em novas propostas. */
   monitoring: boolean;
   alarm: boolean;
   intercom: boolean;
@@ -72,12 +98,21 @@ export type Briefing = {
   maintenance: boolean;
   notes: string;
   priority: "prazo" | "orcamento" | "tecnica" | "seguranca";
-};
-
-export type DeliveryTermSection = {
-  id: string;
-  title: string;
-  body: string;
+  /** Percentual de miscelâneas e fixadores sobre equipamentos (padrão: 8%) */
+  miscPct?: number;
+  /** Percentual de infraestrutura seca e eletrodutos sobre equipamentos (padrão: 10%) */
+  infraPct?: number;
+  /** Margem de segurança técnica e contingência sobre equipamentos (padrão: 5%) */
+  marginPct?: number;
+  /** Valor específico de mão de obra para a proposta (em Reais) */
+  laborValue?: number;
+  /** Título/cabeçalho personalizado da proposta (opcional) */
+  customKicker?: string;
+  /** Textos e parcelamento do bloco VALOR (editáveis direto no documento) */
+  valueBlock?: ValueBlockConfig;
+  /** Versão comodato (opcional) */
+  comodato?: ComodatoConfig;
+  /** Itens gerados automaticamente pelos custos indiretos (recalculados ao mudar equipamentos) */
 };
 
 export type ProposalDraft = {
@@ -102,6 +137,7 @@ export type Totals = {
   offCents: number;
   totalCents: number;
   installmentCents: number;
+  installments: number;
 };
 
 export const STAGES: { id: ProposalStage; label: string; hint: string; accent: string }[] = [

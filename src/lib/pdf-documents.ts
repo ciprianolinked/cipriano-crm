@@ -1,11 +1,9 @@
 import type { jsPDF } from "jspdf";
 import { brl, fmtDate } from "@/lib/brand";
 import { calcTotals, typeLabels } from "@/lib/proposal/catalog";
+import { paymentRows, resolveValueBlock } from "@/lib/proposal/value-block";
 import { isMaintenanceProposal, maintenanceSummary } from "@/lib/proposal/maintenance-plan";
 import type { ProposalItem, ProposalSection, ProposalType } from "@/lib/proposal/types";
-import { DEFAULT_SEALS, readDocTexts, tx, type DocTexts } from "@/lib/proposal/doc-text";
-import { AUTO_GROUP_LABEL, autoItemNote } from "@/lib/proposal/extras";
-import { getPaymentInstallments, installmentAmount } from "@/lib/proposal/payment";
 
 /** Normaliza para NFC e troca apenas glifos fora do conjunto das fontes padrão do PDF. */
 export const pdfSafe = (value: string) =>
@@ -102,8 +100,6 @@ const LINE_H = 4.3;
 /** Folha A4: cabeçalho repetido, conteúdo paginado por linha e rodapé com colunas limitadas. */
 export class A4Sheet {
   private y = M.top;
-  /** Modo "arejado": mais respiro entre blocos, tabelas e parágrafos (usado nas propostas). */
-  roomy = false;
 
   constructor(private pdf: jsPDF, private opts: SheetOptions, private logo: string | null) {
     this.paintHeader();
@@ -180,7 +176,7 @@ export class A4Sheet {
 
   /** Título numerado, com o texto original e acentuação preservada. */
   heading(index: string, title: string) {
-    this.ensure(this.roomy ? 22 : 14);
+    this.ensure(14);
     const y = this.y;
     this.setBody(9.2, true, C.dark);
     // Caixa alta como na prévia em tela, preservando acentuação.
@@ -197,7 +193,7 @@ export class A4Sheet {
     this.pdf.setDrawColor(...C.rule);
     this.pdf.setLineWidth(0.35);
     this.pdf.line(M.left + 12.5 + titleWidth + 4, y - 1.5, W - M.right, y - 1.5);
-    this.y = y + (this.roomy ? 9 : 6.4);
+    this.y = y + 6.4;
   }
 
   sectionTitle(value: string) {
@@ -213,14 +209,13 @@ export class A4Sheet {
   }
 
   subheading(value: string) {
-    if (this.roomy) this.y += 3;
-    this.ensure(this.roomy ? 14 : 9);
+    this.ensure(9);
     const y = this.y;
     this.pdf.setFillColor(...C.signal);
     this.pdf.rect(M.left, y - 3.1, 1.3, 4, "F");
     this.setBody(8.2, true, C.dark);
     this.pdf.text(clip(this.pdf, value, CONTENT - 8), M.left + 4, y);
-    this.y = y + (this.roomy ? 7.2 : 5.4);
+    this.y = y + 5.4;
   }
 
   paragraph(value: string, options: { indent?: number; size?: number; bold?: boolean; color?: RGB; gap?: number } = {}) {
@@ -238,7 +233,7 @@ export class A4Sheet {
       this.pdf.text(line, M.left + indent, this.y);
       this.y += lh;
     }
-    this.y += options.gap ?? (this.roomy ? 2.8 : 1.5);
+    this.y += options.gap ?? 2.8;
   }
 
   bullets(items: string[]) {
@@ -258,9 +253,9 @@ export class A4Sheet {
         this.pdf.text(lines[i], M.left + 6.5, this.y);
         this.y += LINE_H;
       }
-      this.y += this.roomy ? 1.7 : 0.8;
+      this.y += 0.8;
     }
-    this.y += this.roomy ? 2.2 : 1;
+    this.y += 1;
   }
 
   richText(value: string) {
@@ -284,10 +279,10 @@ export class A4Sheet {
   }
 
   /** Faixa de cliente: altura dinâmica, e-mail abaixo do nome (como na prévia) e estilos por linha. */
-  clientStrip(data: { name: string; contact: string; email: string; site: string; labels?: [string, string, string] }) {
+  clientStrip(data: { name: string; contact: string; email: string; site: string }) {
     const pdf = this.pdf;
     const widths = [0.36, 0.3, 0.34];
-    const labels = (data.labels ?? ["CLIENTE", "CONTATO", "LOCAL"]).map((label) => label.toUpperCase());
+    const labels = ["CLIENTE", "CONTATO", "LOCAL"];
     const values = [data.name || "-", data.contact || "-", data.site || "A confirmar"];
     type CellLine = { value: string; size: number; bold: boolean; color: RGB };
     const columns: CellLine[][] = [];
@@ -333,7 +328,7 @@ export class A4Sheet {
       }
       x += CONTENT * ratio;
     });
-    this.y = y + height + (this.roomy ? 9 : 4);
+    this.y = y + height + 4;
   }
 
   table(
@@ -387,11 +382,11 @@ export class A4Sheet {
         this.y += 3.7;
       }
       ensureWithHeader(3);
-      const bottom = this.y + (this.roomy ? 3 : 1.8);
+      const bottom = this.y + 1.8;
       pdf.setDrawColor(...C.rule);
       pdf.setLineWidth(0.25);
       pdf.line(M.left, bottom, W - M.right, bottom);
-      this.y = bottom + (this.roomy ? 1.8 : 1);
+      this.y = bottom + 1;
     }
     if (footer) {
       ensureWithHeader(9);
@@ -407,7 +402,7 @@ export class A4Sheet {
         pdf.text(clip(pdf, footer[i] ?? "", col.width - 5), cellX, y + 5, { align });
         x += col.width;
       });
-      this.y = y + (this.roomy ? 11 : 8);
+      this.y = y + 8;
     }
   }
 
@@ -431,9 +426,9 @@ export class A4Sheet {
       pdf.setDrawColor(...C.rule);
       pdf.setLineWidth(0.25);
       pdf.line(M.left, y + height, W - M.right, y + height);
-      this.y = y + height + (this.roomy ? 2.8 : 1.5);
+      this.y = y + height + 1.5;
     }
-    this.space(this.roomy ? 5 : 2);
+    this.space(2);
   }
 
   totals(data: { primaryLabel: string; primaryValue: string; primaryNote: string; rows: [string, string][] }) {
@@ -467,13 +462,13 @@ export class A4Sheet {
       pdf.text(clip(pdf, value, 62), W - M.right - 6, rowY, { align: "right" });
       rowY += 6.6;
     }
-    this.y = y + (this.roomy ? 40 : 34);
+    this.y = y + 34;
   }
 
   signatures(left: string, right: string) {
     const pdf = this.pdf;
     this.ensure(26);
-    const y = this.y + (this.roomy ? 14 : 7);
+    const y = this.y + 7;
     const width = (CONTENT - 12) / 2;
     pdf.setDrawColor(...C.dark);
     pdf.setLineWidth(0.35);
@@ -482,12 +477,11 @@ export class A4Sheet {
     this.setBody(6.8, false, C.steel);
     pdf.text(clip(pdf, left, width), M.left, y + 4.2);
     pdf.text(clip(pdf, right, width), M.left + width + 12, y + 4.2);
-    this.y = y + (this.roomy ? 14 : 10);
+    this.y = y + 10;
   }
 
   seal(tags: string[]) {
     if (!tags.length) return;
-    if (this.roomy) this.y += 4;
     this.ensure(9);
     const pdf = this.pdf;
     pdf.setFont("courier", "normal");
@@ -581,7 +575,7 @@ const shortTypes: Record<string, string> = {
 };
 
 /** Lê as condições da própria proposta, preservando rótulos e valores sem repetir o conteúdo. */
-function conditionRows(section: ProposalSection, doc: PdfProposalData, maintenance: boolean, texts: DocTexts): { intro: string[]; rows: [string, string][] } {
+function conditionRows(section: ProposalSection, doc: PdfProposalData, maintenance: boolean): { intro: string[]; rows: [string, string][] } {
   const intro: string[] = [];
   const rows: [string, string][] = [];
   for (const raw of section.body.split(/\r?\n/)) {
@@ -603,24 +597,27 @@ function conditionRows(section: ProposalSection, doc: PdfProposalData, maintenan
     const payment = intro.length ? intro.join(" ") : doc.paymentTerms || "A combinar";
     intro.length = 0;
     rows.push(
-      [tx(texts, "termPay", "Pagamento"), payment],
-      [tx(texts, "termExec", maintenance ? "Serviços recorrentes" : "Execução"), doc.deliveryTime || "A combinar"],
-      [tx(texts, "termWarranty", "Garantia"), doc.warranty || "A combinar"],
-      [tx(texts, "termValidity", "Validade"), `${doc.validityDays} dias corridos a partir da emissão`],
+      ["Pagamento", payment],
+      [maintenance ? "Serviços recorrentes" : "Execução", doc.deliveryTime || "A combinar"],
+      ["Garantia", doc.warranty || "A combinar"],
+      ["Validade", `${doc.validityDays} dias corridos a partir da emissão`],
     );
   }
   return { intro, rows };
 }
 
 export function renderProposalPdf(pdf: jsPDF, doc: PdfProposalData, settings: PdfSettings, logo: string | null) {
-  const texts = readDocTexts(doc.briefing);
-  const t = (key: string, fallback: string) => tx(texts, key, fallback);
-  const totals = calcTotals(doc.items, doc.discountPct);
   const maintenance = isMaintenanceProposal(doc.briefing);
   const monthly = maintenanceSummary(doc.items, doc.discountPct, doc.briefing);
-  const installments = getPaymentInstallments(doc.briefing);
-  const defaultLabel = maintenance ? "Proposta de manutenção mensal" : typeLabels[(doc.type as ProposalType) ?? "completa"] ?? "Proposta comercial";
-  const label = t("kicker", defaultLabel);
+  const valueBlock = resolveValueBlock({
+    briefing: doc.briefing,
+    maintenance,
+    itemCount: doc.items.length,
+    discountPct: doc.discountPct,
+    months: monthly.months,
+  });
+  const totals = calcTotals(doc.items, doc.discountPct, valueBlock.installments);
+  const label = maintenance ? "Proposta de manutenção mensal" : typeLabels[(doc.type as ProposalType) ?? "completa"] ?? "Proposta comercial";
   pdf.setProperties({
     title: `${doc.number} · ${doc.clientName}`,
     subject: label,
@@ -628,36 +625,25 @@ export function renderProposalPdf(pdf: jsPDF, doc: PdfProposalData, settings: Pd
     creator: "Cipriano Doc Engine 3.0",
     keywords: "proposta, segurança eletrônica, Cipriano, manutenção",
   });
-  const footerNote = Object.prototype.hasOwnProperty.call(texts, "footR1")
-    ? texts.footR1
-    : Object.prototype.hasOwnProperty.call(texts, "footR2")
-      ? texts.footR2
-      : `${settings.site}  |  ${settings.email}`;
   const sheet = new A4Sheet(
     pdf,
     {
       label,
       reference: `${doc.number}  |  ${shortTypes[doc.type] ?? doc.type}`,
-      meta: [
-        `${t("lblIssue", "Emissão").toUpperCase()}  ${fmtDate(doc.issuedAt)}`,
-        `${t("lblValidity", "Validade").toUpperCase()}  ${doc.validityDays} DIAS`,
-        t("metaCrea", settings.crea),
-      ],
-      footerLeft: t("footL1", settings.legalName),
-      footerLeft2: t("footL2", `CNPJ ${settings.cnpj}  |  ${settings.phone}`),
+      meta: [`EMISSÃO  ${fmtDate(doc.issuedAt)}`, `VALIDADE  ${doc.validityDays} DIAS`, settings.crea],
+      footerLeft: settings.legalName,
+      footerLeft2: `CNPJ ${settings.cnpj}  |  ${settings.phone}`,
       footerCenter: `${doc.number}  |  ${doc.clientName}`,
-      footerNote,
+      footerNote: `${settings.site}  |  ${settings.email}`,
     },
     logo,
   );
-  sheet.roomy = true;
 
   sheet.clientStrip({
     name: doc.clientName,
     contact: doc.contact || "-",
     email: doc.clientEmail || "",
     site: doc.site || "A confirmar",
-    labels: [t("stripClient", "Cliente"), t("stripContact", "Contato"), t("stripSite", maintenance ? "Local de atendimento" : "Local de instalação")],
   });
 
   const enabled = doc.sections.filter((section) => section.enabled);
@@ -665,7 +651,7 @@ export function renderProposalPdf(pdf: jsPDF, doc: PdfProposalData, settings: Pd
     sheet.heading(String(index + 1).padStart(2, "0"), section.title);
 
     if (section.kind === "terms") {
-      const { intro, rows } = conditionRows(section, doc, maintenance, texts);
+      const { intro, rows } = conditionRows(section, doc, maintenance);
       intro.forEach((line) => sheet.paragraph(line));
       sheet.terms(rows);
     } else if (section.body?.trim()) {
@@ -674,7 +660,6 @@ export function renderProposalPdf(pdf: jsPDF, doc: PdfProposalData, settings: Pd
 
     if (section.kind === "table" && section.rows?.length) {
       const columns = section.columns;
-      sheet.space(2);
       sheet.table(
         [
           { label: columns?.[0] ?? "Frente de trabalho", width: 74 },
@@ -686,79 +671,67 @@ export function renderProposalPdf(pdf: jsPDF, doc: PdfProposalData, settings: Pd
     }
 
     if (section.kind === "items") {
-      const regular = doc.items.filter((item) => !item.auto);
-      const automatic = doc.items.filter((item) => item.auto);
-      const hasScope = regular.some((item) => Boolean(item.scope));
+      const hasScope = doc.items.some((item) => Boolean(item.scope));
       const scoped: { label: string; rows: ProposalItem[] }[] = [];
       if (hasScope) {
-        for (const item of regular) {
-          const groupLabel = item.scope?.trim() || "Itens Complementares";
-          const existing = scoped.find((group) => group.label === groupLabel);
+        for (const item of doc.items) {
+          const label = item.scope?.trim() || "Itens Complementares";
+          const existing = scoped.find((group) => group.label === label);
           if (existing) existing.rows.push(item);
-          else scoped.push({ label: groupLabel, rows: [item] });
+          else scoped.push({ label, rows: [item] });
         }
       } else {
         scoped.push(
-          { label: t("groupEquip", "EQUIPAMENTOS"), rows: regular.filter((item) => item.kind === "equipamento") },
-          { label: t("groupServ", "SERVIÇOS"), rows: regular.filter((item) => item.kind === "servico") },
+          { label: "EQUIPAMENTOS", rows: doc.items.filter((item) => item.kind === "equipamento") },
+          { label: "SERVIÇOS", rows: doc.items.filter((item) => item.kind === "servico") },
         );
       }
-      if (automatic.length) scoped.push({ label: t("groupExtras", AUTO_GROUP_LABEL), rows: automatic });
       for (const group of scoped) {
         const rows = group.rows;
         if (!rows.length) continue;
         const subtotal = rows.reduce((sum, item) => sum + item.qty * item.price, 0);
-        sheet.subheading(group.label.toUpperCase());
+        sheet.subheading(group.label);
         sheet.table(
           [
-            { label: t("colDesc", "Descrição / especificação"), width: 78 },
-            { label: t("colUn", "Un."), width: 14, align: "center" },
-            { label: t("colQty", "Qtd."), width: 16, align: "right" },
-            { label: t("colUnit", "Unitário"), width: 32, align: "right" },
-            { label: t("colTotal", "Total"), width: 36, align: "right" },
+            { label: "Descrição / especificação", width: 78 },
+            { label: "Un.", width: 14, align: "center" },
+            { label: "Qtd.", width: 16, align: "right" },
+            { label: "Unitário", width: 32, align: "right" },
+            { label: "Total", width: 36, align: "right" },
           ],
-          rows.map((item) => {
-            const note = autoItemNote(item);
-            return [
-              `${item.desc}${item.spec ? ` — ${item.spec}` : ""}${note ? ` · ${note}` : ""}`,
-              item.unit,
-              String(item.qty),
-              brl(item.price),
-              brl(item.price * item.qty),
-            ];
-          }),
-          ["", "", `${t("subtotalLabel", "Subtotal")} · ${group.label}`, "", brl(subtotal)],
+          rows.map((item) => [`${item.desc}${item.spec ? ` — ${item.spec}` : ""}`, item.unit, String(item.qty), brl(item.price), brl(item.price * item.qty)]),
+          ["", "", `Subtotal · ${group.label}`, "", brl(subtotal)],
         );
       }
     }
 
     if (section.kind === "totals") {
-      sheet.space(3);
-      const defaultNote = maintenance
-        ? `${monthly.months} meses de vigência estimada. Desconto comercial de ${doc.discountPct}% já aplicado.`
-        : `${doc.items.length} itens. Desconto comercial de ${doc.discountPct}% já aplicado.`;
       sheet.totals({
-        primaryLabel: t("totalsLabel", maintenance ? "Mensalidade da manutenção" : "Investimento total"),
+        primaryLabel: valueBlock.primaryLabel,
         primaryValue: `${brl((maintenance ? monthly.monthlyCents : totals.totalCents) / 100)}${maintenance ? " / mês" : ""}`,
-        primaryNote: t("totalsSub", defaultNote),
+        primaryNote: valueBlock.primaryNote,
         rows: [
-          [t("miniSubtotal", "Subtotal"), brl(totals.subtotalCents / 100)],
-          [t("miniDiscount", "Desconto"), `− ${brl(totals.offCents / 100)}`],
-          [t("miniFinal", maintenance ? "Total do período" : `${installments}× de`), brl((maintenance ? totals.totalCents : installmentAmount(totals.totalCents, installments)) / 100)],
+          [valueBlock.subtotalLabel, brl(totals.subtotalCents / 100)],
+          [valueBlock.discountLabel, `− ${brl(totals.offCents / 100)}`],
+          [
+            maintenance ? valueBlock.installmentLabel : `${valueBlock.installments}× ${valueBlock.installmentLabel}`,
+            brl((maintenance ? totals.totalCents : totals.installmentCents) / 100),
+          ],
         ],
       });
+      if (!maintenance) {
+        sheet.subheading(valueBlock.paymentTitle.toUpperCase());
+        sheet.terms(paymentRows(valueBlock, totals.totalCents));
+      }
     }
 
     if (section.id === "aceite") {
-      sheet.signatures(
-        t("signA", `${settings.legalName}  |  ${settings.director}`),
-        t("signB", `${doc.clientName}  |  Responsável pelo aceite`),
-      );
+      sheet.signatures(`${settings.legalName}  |  ${settings.director}`, `${doc.clientName}  |  Responsável pelo aceite`);
     }
-    sheet.space(9);
+    sheet.space(4.5);
   });
 
-  sheet.seal(DEFAULT_SEALS.map((tag, i) => t(`seal${i}`, tag).trim().toUpperCase()).filter(Boolean));
+  sheet.seal(["CFTV IP", "CONTROLE DE ACESSO", "CERCA ELÉTRICA", "REDES ESTRUTURADAS", "LGPD"]);
   sheet.finalize();
 }
 
@@ -796,5 +769,104 @@ export function renderContractPdf(
     input.logo ?? null,
   );
   sheet.richText(input.text);
+  sheet.finalize();
+}
+
+export type PdfDeliveryTermData = {
+  termNumber: string;
+  proposalNumber: string | null;
+  clientName: string;
+  site: string | null;
+  deliveryDate: string | Date | null;
+  technician: string;
+  receiverName: string;
+  receiverDoc: string;
+  items: { id: string; desc: string; spec: string; unit: string; qty: number; checked: boolean; serial: string; obs: string }[];
+  intro: string;
+  scopeSummary: string;
+  tests: string;
+  pendencies: string;
+  warranty: string;
+  observations: string;
+};
+
+export function renderDeliveryTermPdf(pdf: jsPDF, doc: PdfDeliveryTermData, settings: PdfSettings, logo: string | null) {
+  pdf.setProperties({
+    title: `${doc.termNumber} · ${doc.clientName}`,
+    subject: "Termo de entrega e comissionamento",
+    author: settings.legalName,
+    creator: "Cipriano Doc Engine 3.0",
+    keywords: "termo de entrega, comissionamento, segurança eletrônica, Cipriano",
+  });
+  const sheet = new A4Sheet(
+    pdf,
+    {
+      label: "Termo de entrega",
+      reference: `${doc.termNumber}${doc.proposalNumber ? `  |  REF. ${doc.proposalNumber}` : ""}`,
+      meta: [`ENTREGA  ${fmtDate(doc.deliveryDate)}`, `CLIENTE  ${doc.clientName}`, settings.crea],
+      footerLeft: settings.legalName,
+      footerLeft2: `CNPJ ${settings.cnpj}  |  ${settings.phone}`,
+      footerCenter: `${doc.termNumber}  |  ${doc.clientName}`,
+      footerNote: `${settings.site}  |  ${settings.email}`,
+    },
+    logo,
+  );
+
+  sheet.clientStrip({
+    name: doc.clientName,
+    contact: doc.receiverName || "-",
+    email: doc.receiverDoc || "",
+    site: doc.site || "A confirmar",
+  });
+
+  sheet.heading("01", "Identificação da entrega");
+  if (doc.intro.trim()) sheet.richText(doc.intro);
+  sheet.terms([
+    ["Responsável técnico", doc.technician || "—"],
+    ["Data da entrega", fmtDate(doc.deliveryDate)],
+    ["Proposta de origem", doc.proposalNumber || "—"],
+  ]);
+
+  sheet.heading("02", "Escopo entregue");
+  if (doc.scopeSummary.trim()) sheet.richText(doc.scopeSummary);
+  if (doc.items.length) {
+    const checked = doc.items.filter((i) => i.checked).length;
+    sheet.subheading(`CHECKLIST DE ENTREGA · ${checked}/${doc.items.length} CONFERIDOS`);
+    sheet.table(
+      [
+        { label: "OK", width: 12, align: "center" },
+        { label: "Item entregue", width: 76 },
+        { label: "Un.", width: 14, align: "center" },
+        { label: "Qtd.", width: 16, align: "right" },
+        { label: "Série / observação", width: 58 },
+      ],
+      doc.items.map((item) => [
+        item.checked ? "[X]" : "[ ]",
+        `${item.desc}${item.spec ? ` — ${item.spec}` : ""}`,
+        item.unit,
+        String(item.qty),
+        [item.serial, item.obs].filter(Boolean).join(" · ") || "—",
+      ]),
+    );
+  }
+
+  sheet.heading("03", "Testes executados");
+  if (doc.tests.trim()) sheet.richText(doc.tests);
+  else sheet.paragraph("Testes de funcionamento executados e aprovados em campo.");
+
+  sheet.heading("04", "Pendências");
+  if (doc.pendencies.trim()) sheet.richText(doc.pendencies);
+
+  sheet.heading("05", "Garantia");
+  if (doc.warranty.trim()) sheet.richText(doc.warranty);
+
+  sheet.heading("06", "Observações e aceite");
+  if (doc.observations.trim()) sheet.richText(doc.observations);
+  sheet.signatures(
+    `${settings.legalName}  |  ${doc.technician || settings.director}`,
+    `${doc.clientName}  |  ${doc.receiverName || "Responsável pelo recebimento"}`,
+  );
+
+  sheet.seal(["CFTV IP", "CONTROLE DE ACESSO", "CERCA ELÉTRICA", "REDES ESTRUTURADAS", "LGPD"]);
   sheet.finalize();
 }

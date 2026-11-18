@@ -53,17 +53,6 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
 
   if (!response.ok) {
     if (serverMessage) throw new ApiError(serverMessage, response.status, contentType);
-    if (response.status === 404 && (contentType.includes("text/html") || /^\s*<!doctype|^\s*<html/i.test(body))) {
-      let path = url;
-      try { path = new URL(url, window.location.origin).pathname; } catch { /* mantém a URL original */ }
-      throw new ApiError(
-        `A rota ${path} não existe nesta publicação (HTTP 404). O código publicado está incompleto: ` +
-          "confirme que a pasta correspondente em src/app/api foi enviada ao GitHub e faça um novo deploy. " +
-          "Depois confira /api/health e /diagnostico.",
-        response.status,
-        contentType,
-      );
-    }
     if (contentType.includes("text/html") || /^\s*<!doctype|^\s*<html/i.test(body)) {
       throw new ApiError(
         `O servidor devolveu uma página HTML (HTTP ${response.status}) em vez dos dados da API. ` +

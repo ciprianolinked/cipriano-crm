@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import { eq, or } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, proposals } from "@/db/schema";
-import { withNextProposalNumber } from "@/lib/data";
+import { nextProposalNumber } from "@/lib/data";
 import { isProposalType } from "@/lib/proposal/types";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const body = (await request.json().catch(() => ({}))) as { revision?: boolean };
+  const body = (await request.json()) as { revision?: boolean };
   const isRevision = body.revision === true;
 
   const rows = await db.select().from(proposals).where(eq(proposals.id, id)).limit(1);
@@ -19,12 +19,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const family = isRevision
     ? await db.select({ revision: proposals.revision }).from(proposals).where(or(eq(proposals.id, groupId), eq(proposals.revisionGroupId, groupId)))
     : [];
+  const number = await nextProposalNumber();
+
   const revisionNumber = isRevision ? Math.max(source.revision ?? 1, ...family.map((r) => r.revision)) + 1 : 1;
   const parentId = isRevision ? id : null;
   const revisionGroupId = isRevision ? groupId : source.id;
 
-  const row = await withNextProposalNumber(async (tx, number) => {
-  const [created] = await tx
+  const [row] = await db
     .insert(proposals)
     .values({
       number,
@@ -54,13 +55,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     })
     .returning();
 
-  await tx.insert(activities).values({
-    proposalId: created.id,
+  await db.insert(activities).values({
+    proposalId: row.id,
     kind: "sistema",
     content: `Revisão ${revisionNumber} gerada a partir da proposta ${source.number}.`,
     doneAt: new Date(),
-  });
-  return created;
   });
 
   return NextResponse.json({ proposal: row, isRevision }, { status: 201 });

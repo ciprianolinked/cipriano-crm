@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import { SideNav } from "@/components/nav";
 import { SiteFooter } from "@/components/SiteFooter";
+import { RefreshOnFocus } from "@/components/system/RefreshOnFocus";
 
 export const metadata: Metadata = {
   title: "Cipriano Tech & Security · Propostas & CRM",
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <div className="flex min-h-screen flex-col lg:flex-row">
           <SideNav />
+          <RefreshOnFocus />
           <main className="flex min-w-0 flex-1 flex-col">
             <div className="flex-1">{children}</div>
             <SiteFooter />

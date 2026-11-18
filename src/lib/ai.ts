@@ -28,7 +28,6 @@ export function analyzeBriefingNotes(notes: string, base: Briefing): Briefing {
 
   if (/(alarme|sensor|sirene|intrusao)/.test(text)) next.alarm = true;
   if (/(interfone|interfonia|video porteiro|videoporteiro)/.test(text)) next.intercom = true;
-  if (/(monitoramento|noc|24h|24 horas|ronda)/.test(text)) next.monitoring = true;
   if (/(manutencao|preventiva|contrato)/.test(text)) next.maintenance = true;
   if (/(rede|switch|cabeamento|poe|rack|fibra)/.test(text)) next.network = true;
   if (/(condominio)/.test(text)) next.segment = "Condomínio residencial";
@@ -63,7 +62,6 @@ export function buildInsights(input: {
   validityDays: number;
 }): Insight[] {
   const out: Insight[] = [];
-  const hasMonitoring = input.items.some((i) => /nOC|monitoramento/i.test(i.desc));
   const hasMaintenance = input.items.some((i) => /manuten/i.test(i.desc));
   const art = input.sections.find((s) => s.id === "art");
 
@@ -72,13 +70,6 @@ export function buildInsights(input: {
       tone: "warn",
       title: "ART desativada em proposta completa",
       detail: "Para obras acima de R$ 20 mil, incluir ART e as-built reduz objeção técnica. Ative o bloco “ART e Projeto”.",
-    });
-  }
-  if (!hasMonitoring && (input.briefing.cameras >= 8 || input.briefing.segment.includes("Condomínio"))) {
-    out.push({
-      tone: "info",
-      title: "Oportunidade de recorrência: NOC 24h",
-      detail: "Com 8+ câmeras o cliente já tem operação crítica. Ofereça monitoramento: aumenta o ticket mensal e a retenção.",
     });
   }
   if (!hasMaintenance && input.briefing.cameras >= 4) {

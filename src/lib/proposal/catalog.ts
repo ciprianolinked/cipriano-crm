@@ -22,6 +22,10 @@ export const defaultBriefing: Briefing = {
   maintenance: false,
   notes: "",
   priority: "seguranca",
+  miscPct: 8,
+  infraPct: 10,
+  marginPct: 5,
+  laborValue: 2800,
 };
 
 export const SEGMENTS = [
@@ -99,7 +103,7 @@ export const catalogSeed: CatalogSeed[] = [
     kind: "equipamento",
     category: "Perímetro",
     description: "Cerca elétrica perimetral",
-    spec: "6 fios de aço inox 0,9 mm · central monitorada · sinalização a cada 3 m",
+    spec: "6 fios de aço inox 0,9 mm · central de alarme · sinalização a cada 3 m",
     unit: "m",
     supplierPriceCents: 0,
     marginPct: 35,
@@ -107,7 +111,7 @@ export const catalogSeed: CatalogSeed[] = [
   {
     kind: "equipamento",
     category: "Alarme",
-    description: "Central de alarme monitorado",
+    description: "Central de alarme",
     spec: "Painel híbrido · sensores IVP · sirene 110 dB · bateria 12 h",
     unit: "vb",
     supplierPriceCents: 0,
@@ -169,10 +173,10 @@ export const catalogSeed: CatalogSeed[] = [
   },
   {
     kind: "servico",
-    category: "Monitoramento",
-    description: "Monitoramento NOC 24h",
-    spec: "Verificação de imagem, ronda virtual e SLA de atendimento em 4 h",
-    unit: "mês",
+    category: "Suporte",
+    description: "Suporte técnico remoto",
+    spec: "Acesso remoto para ajustes, cadastro de usuários e diagnóstico de falhas",
+    unit: "h",
     supplierPriceCents: 0,
     marginPct: 100,
   },
@@ -189,7 +193,8 @@ export const catalogSeed: CatalogSeed[] = [
 
 export const roundCents = (reais: number) => Math.round(reais * 100);
 
-export function calcTotals(items: ProposalItem[], discountPct: number): Totals {
+export function calcTotals(items: ProposalItem[], discountPct: number, installments = 12): Totals {
+  const safeInstallments = Math.min(60, Math.max(1, Math.round(installments) || 12));
   const subtotalCents = items.reduce((acc, item) => acc + roundCents(item.price) * Math.max(0, item.qty), 0);
   const offCents = Math.round((subtotalCents * Math.min(100, Math.max(0, discountPct))) / 100);
   const totalCents = subtotalCents - offCents;
@@ -197,7 +202,8 @@ export function calcTotals(items: ProposalItem[], discountPct: number): Totals {
     subtotalCents,
     offCents,
     totalCents,
-    installmentCents: totalCents > 0 ? Math.round(totalCents / 12) : 0,
+    installmentCents: totalCents > 0 ? Math.round(totalCents / safeInstallments) : 0,
+    installments: safeInstallments,
   };
 }
 

@@ -1,143 +1,84 @@
 import { NextResponse } from "next/server";
-import { desc, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { referenceFiles } from "@/db/schema";
-import { ensureSchema } from "@/lib/db-migrations";
 import {
   ALLOWED_REFERENCE_TYPES,
   MAX_REFERENCE_BYTES,
   MAX_REFERENCE_FILES,
-  analyzeReferenceText,
   extractReference,
 } from "@/lib/references";
+import {
+  analyzeStoredText,
+  countReferenceRows,
+  ensureReferenceTable,
+  listReferenceRows,
+  toReferenceFile,
+} from "@/lib/references-store";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
-function resolveMimeType(file: File): string {
-  if ((ALLOWED_REFERENCE_TYPES as readonly string[]).includes(file.type)) {
-    return file.type;
-  }
-  const lower = file.name.toLowerCase();
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
-  if (lower.endsWith(".webp")) return "image/webp";
-  if (lower.endsWith(".csv")) return "text/csv";
-  if (lower.endsWith(".md")) return "text/markdown";
-  if (lower.endsWith(".txt")) return "text/plain";
-  return file.type || "application/octet-stream";
-}
+const json = (body: unknown, status = 200) =>
+  NextResponse.json(body, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
 
-function serializeReference(row: {
-  id: string;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-  note: string | null;
-  manualText: string | null;
-  extractedText: string | null;
-  createdAt: Date;
-  analysis: ReturnType<typeof analyzeReferenceText> | null;
-}) {
-  const effectiveText = row.manualText?.trim() || row.extractedText?.trim() || "";
-  return {
-    id: row.id,
-    fileName: row.fileName,
-    mimeType: row.mimeType,
-    sizeBytes: row.sizeBytes,
-    note: row.note,
-    manualText: row.manualText,
-    createdAt: row.createdAt.toISOString(),
-    analysis: row.analysis,
-    url: `/api/references/${row.id}/file`,
-    textPreview: effectiveText.slice(0, 3000),
-  };
+function safeName(name: string): string {
+  return name.split(/[\\/]/).pop()?.replace(/[\u0000-\u001f]/g, "").trim().slice(0, 180) || "referencia";
 }
 
 export async function GET() {
-  await ensureSchema();
-  const rows = await db
-    .select({
-      id: referenceFiles.id,
-      fileName: referenceFiles.fileName,
-      mimeType: referenceFiles.mimeType,
-      sizeBytes: referenceFiles.sizeBytes,
-      note: referenceFiles.note,
-      manualText: referenceFiles.manualText,
-      extractedText: referenceFiles.extractedText,
-      createdAt: referenceFiles.createdAt,
-      analysis: referenceFiles.analysis,
-    })
-    .from(referenceFiles)
-    .orderBy(desc(referenceFiles.createdAt));
-
-  return NextResponse.json({ files: rows.map(serializeReference) });
+  try {
+    await ensureReferenceTable();
+    const rows = await listReferenceRows();
+    return json({ files: rows.map(toReferenceFile) });
+  } catch (error) {
+    console.error("[references] Falha ao listar:", (error as Error)?.message);
+    return json({ error: "Não foi possível carregar os arquivos de referência. Confira /api/health." }, 503);
+  }
 }
 
 export async function POST(request: Request) {
-  await ensureSchema();
-  const form = await request.formData();
-  const entry = form.get("file");
-  if (!(entry instanceof File)) {
-    return NextResponse.json({ error: "Selecione um arquivo válido." }, { status: 400 });
-  }
-  if (entry.size <= 0) {
-    return NextResponse.json({ error: "O arquivo enviado está vazio." }, { status: 400 });
-  }
-  if (entry.size > MAX_REFERENCE_BYTES) {
-    return NextResponse.json(
-      { error: "O arquivo excede o limite de 4 MB por envio." },
-      { status: 413 },
-    );
-  }
+  try {
+    await ensureReferenceTable();
+    if ((await countReferenceRows()) >= MAX_REFERENCE_FILES) {
+      return json({ error: `Limite de ${MAX_REFERENCE_FILES} arquivos atingido. Exclua um antes de enviar outro.` }, 400);
+    }
 
-  const mimeType = resolveMimeType(entry);
-  if (!(ALLOWED_REFERENCE_TYPES as readonly string[]).includes(mimeType)) {
-    return NextResponse.json(
-      { error: "Formato não suportado. Use PDF, PNG, JPG, WEBP, TXT ou CSV." },
-      { status: 400 },
-    );
+    const form = await request.formData().catch(() => null);
+    const candidate = form?.get("file");
+    if (!candidate || typeof candidate === "string") return json({ error: "Envie um arquivo no campo \"file\"." }, 400);
+
+    const file = candidate as File;
+    const mimeType = (file.type || "").toLowerCase();
+    const fileName = safeName(file.name || "referencia");
+    if (!(ALLOWED_REFERENCE_TYPES as readonly string[]).includes(mimeType)) {
+      return json({ error: "Formato não aceito. Use PDF, PNG, JPG, WEBP, TXT, MD ou CSV." }, 415);
+    }
+    if (file.size > MAX_REFERENCE_BYTES) {
+      return json({ error: "Arquivo maior que 4 MB. Reduza o arquivo antes de enviar." }, 413);
+    }
+    if (file.size === 0) return json({ error: "O arquivo está vazio." }, 400);
+
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const extracted = await extractReference(bytes, mimeType);
+    const analysis = analyzeStoredText(extracted.text, extracted.pages);
+
+    const [row] = await db
+      .insert(referenceFiles)
+      .values({
+        fileName,
+        mimeType,
+        sizeBytes: bytes.length,
+        data: bytes,
+        extractedText: extracted.text.slice(0, 200000) || null,
+        layoutRows: extracted.layoutRows.length ? extracted.layoutRows.slice(0, 400) : null,
+        analysis,
+      })
+      .returning();
+
+    return json({ file: toReferenceFile(row) }, 201);
+  } catch (error) {
+    console.error("[references] Falha no upload:", (error as Error)?.message);
+    return json({ error: "Não foi possível salvar o arquivo. Confira /api/health e tente novamente." }, 503);
   }
-
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(referenceFiles);
-  if (count >= MAX_REFERENCE_FILES) {
-    return NextResponse.json(
-      { error: `Limite de ${MAX_REFERENCE_FILES} arquivos atingido. Exclua um antes de enviar outro.` },
-      { status: 400 },
-    );
-  }
-
-  const bytes = Buffer.from(await entry.arrayBuffer());
-  const extracted = await extractReference(bytes, mimeType);
-  const analysis = {
-    ...analyzeReferenceText(extracted.text, extracted.pages),
-    layoutRows: extracted.layoutRows,
-  };
-
-  const [created] = await db
-    .insert(referenceFiles)
-    .values({
-      fileName: entry.name.slice(0, 220),
-      mimeType,
-      sizeBytes: entry.size,
-      data: bytes,
-      extractedText: extracted.text || null,
-      layoutRows: extracted.layoutRows.length ? extracted.layoutRows : null,
-      analysis,
-    })
-    .returning({
-      id: referenceFiles.id,
-      fileName: referenceFiles.fileName,
-      mimeType: referenceFiles.mimeType,
-      sizeBytes: referenceFiles.sizeBytes,
-      note: referenceFiles.note,
-      manualText: referenceFiles.manualText,
-      extractedText: referenceFiles.extractedText,
-      createdAt: referenceFiles.createdAt,
-      analysis: referenceFiles.analysis,
-    });
-
-  return NextResponse.json({ file: serializeReference(created) }, { status: 201 });
 }

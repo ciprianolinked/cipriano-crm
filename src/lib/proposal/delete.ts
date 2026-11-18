@@ -26,6 +26,28 @@ export async function deleteProposalFamily(id: string): Promise<DeleteProposalFa
       .returning({ id: maintenanceContracts.id });
     await tx.delete(activities).where(inArray(activities.proposalId, ids));
     const deleted = await tx.delete(proposals).where(inArray(proposals.id, ids)).returning({ id: proposals.id });
+
+    // Sincroniza o contador para que a próxima proposta continue exatamente da maior numeração restante
+    const year = new Date().getFullYear();
+    const remaining = await tx.select({ number: proposals.number }).from(proposals);
+    const regex = new RegExp(`^CTS-${year}-(\\d+)$`);
+    let maxSeq = 0;
+    for (const p of remaining) {
+      const match = p.number.match(regex);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxSeq) maxSeq = num;
+      }
+    }
+    const { appSettings } = await import("@/db/schema");
+    const [settings] = await tx.select().from(appSettings).limit(1);
+    if (settings) {
+      await tx
+        .update(appSettings)
+        .set({ proposalCounter: maxSeq, updatedAt: new Date() })
+        .where(eq(appSettings.id, settings.id));
+    }
+
     return { deletedCount: deleted.length, deletedIds: deleted.map((row) => row.id), preservedContractCount: preserved.length };
   });
 }

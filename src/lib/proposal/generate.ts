@@ -26,7 +26,7 @@ export type GeneratorSettings = {
 export const defaultGeneratorSettings: GeneratorSettings = {
   defaultValidityDays: 15,
   defaultPaymentTerms:
-    "Condição de pagamento definida conforme negociação e registrada nesta proposta.",
+    "40% de entrada na assinatura · 60% na entrega técnica (ou 12× no cartão corporativo)",
   defaultDeliveryTime: "12 dias úteis após aceite e liberação da obra",
   defaultWarranty: "24 meses equipamentos · 12 meses mão de obra",
   companyName: brand.name,
@@ -47,7 +47,8 @@ const item = (
   unit: string,
   qty: number,
   price: number,
-): ProposalItem => ({ id: uid("it"), kind, desc, spec, unit, qty, price });
+  scope?: string,
+): ProposalItem => ({ id: uid("it"), kind, desc, spec, unit, qty, price, ...(scope ? { scope } : {}) });
 
 const section = (
   id: string,
@@ -104,7 +105,7 @@ export function buildItems(briefing: Briefing, type: ProposalType, artIncluded: 
       item(
         "equipamento",
         "Cerca elétrica perimetral",
-        "6 fios de aço inox 0,9 mm · central monitorada · sinalização a cada 3 m",
+        "6 fios de aço inox 0,9 mm · central de alarme · sinalização a cada 3 m",
         "m",
         briefing.fenceMeters,
         96,
@@ -116,7 +117,7 @@ export function buildItems(briefing: Briefing, type: ProposalType, artIncluded: 
     items.push(
       item(
         "equipamento",
-        "Central de alarme monitorado",
+        "Central de alarme",
         "Painel híbrido · sensores IVP · sirene 110 dB · bateria 12 h",
         "vb",
         1,
@@ -147,21 +148,93 @@ export function buildItems(briefing: Briefing, type: ProposalType, artIncluded: 
         "vb",
         1,
         4200,
+        "Rede e Infraestrutura",
       ),
     );
   }
 
+  // --- CUSTOS INDIRETOS E ENGENHARIA (Miscelâneas, Infraestrutura e Margem de Segurança) ---
+  // Calculados como percentual sobre o subtotal de equipamentos desta proposta
+  const equipmentSubtotal = items
+    .filter((it) => it.kind === "equipamento")
+    .reduce((sum, it) => sum + it.qty * it.price, 0);
+
+  if (equipmentSubtotal > 0) {
+    const miscPct = briefing.miscPct !== undefined ? briefing.miscPct : 8;
+    if (miscPct > 0) {
+      const miscPrice = Math.round((equipmentSubtotal * miscPct) / 100);
+      items.push(
+        item(
+          "equipamento",
+          "Miscelâneas de instalação e fixação",
+          `Conectores blindados, buchas, parafusos, abraçadeiras, caixas de passagem e vedação (${miscPct}% sobre equipamentos)`,
+          "vb",
+          1,
+          miscPrice,
+          "Rede e Infraestrutura",
+        ),
+      );
+    }
+
+    const infraPct = briefing.infraPct !== undefined ? briefing.infraPct : 10;
+    if (infraPct > 0) {
+      const infraPrice = Math.round((equipmentSubtotal * infraPct) / 100);
+      items.push(
+        item(
+          "equipamento",
+          "Infraestrutura seca, eletrodutos e canaletas",
+          `Eletrodutos rígidos/flexíveis, canaletas de proteção, curvas, conexões e suportes (${infraPct}% sobre equipamentos)`,
+          "vb",
+          1,
+          infraPrice,
+          "Rede e Infraestrutura",
+        ),
+      );
+    }
+
+    const marginPct = briefing.marginPct !== undefined ? briefing.marginPct : 5;
+    if (marginPct > 0) {
+      const marginPrice = Math.round((equipmentSubtotal * marginPct) / 100);
+      items.push(
+        item(
+          "equipamento",
+          "Margem de segurança e contingência técnica",
+          `Reserva técnica para adequações de campo, sobras de cabos e tolerância técnica (${marginPct}% sobre equipamentos)`,
+          "vb",
+          1,
+          marginPrice,
+          "Itens Complementares",
+        ),
+      );
+    }
+  }
+
+  // --- MÃO DE OBRA E SERVIÇOS TÉCNICOS ---
   if (type !== "produtos_servicos") {
+    const laborValue =
+      briefing.laborValue !== undefined && briefing.laborValue > 0
+        ? briefing.laborValue
+        : Math.max(1200, points * 350);
+
     items.push(
       item(
         "servico",
-        "Instalação, configuração e comissionamento",
-        "Fixação, passagem de cabos, ponteiras, configuração de software e testes de aceite",
-        "ponto",
-        points,
-        320,
+        "Mão de obra técnica de instalação e comissionamento",
+        `Fixação física, passagem de cabos, conectorização, configuração de software, testes e entrega técnica (${points} ponto(s))`,
+        "vb",
+        1,
+        laborValue,
+        "Projeto e Serviços Técnicos",
       ),
-      item("servico", "Treinamento operacional da equipe", "4 h presencial · manual do operador · gravação", "turma", 1, 850),
+      item(
+        "servico",
+        "Treinamento operacional da equipe",
+        "4 h presencial · manual do operador · gravação de instruções",
+        "turma",
+        1,
+        850,
+        "Projeto e Serviços Técnicos",
+      ),
     );
     if (artIncluded) {
       items.push(
@@ -172,9 +245,11 @@ export function buildItems(briefing: Briefing, type: ProposalType, artIncluded: 
           "vb",
           1,
           2400,
+          "Projeto e Serviços Técnicos",
         ),
       );
     }
+
     if (briefing.maintenance) {
       items.push(
         item(
@@ -184,10 +259,12 @@ export function buildItems(briefing: Briefing, type: ProposalType, artIncluded: 
           "mês",
           12,
           490,
+          "Manutenção Mensal",
         ),
       );
     }
   } else {
+
     if (briefing.maintenance) {
       items.push(item("servico", "Manutenção preventiva mensal", "Preventiva completa do parque instalado", "mês", 12, 490));
     }
@@ -223,11 +300,11 @@ function scopeList(briefing: Briefing, artIncluded: boolean): string[] {
   }
   if (briefing.fenceMeters > 0) {
     lines.push(
-      `Perímetro: ${briefing.fenceMeters} m de cerca elétrica com 6 fios de aço inox, central monitorada, bateria selada de 12 h e sinalização de advertência a cada 3 m.`,
+      `Perímetro: ${briefing.fenceMeters} m de cerca elétrica com 6 fios de aço inox, central de alarme, bateria selada de 12 h e sinalização de advertência a cada 3 m.`,
     );
   }
   if (briefing.alarm) {
-    lines.push("Alarme monitorado: central híbrida, sensores de presença, sirene de 110 dB e bateria de retaguarda de 12 h.");
+    lines.push("Alarme de intrusão: central híbrida, sensores de presença, sirene de 110 dB e bateria de retaguarda de 12 h.");
   }
   if (briefing.intercom) {
     lines.push("Interfonia IP com vídeo integrada ao controle de acesso e ao aplicativo do morador.");
@@ -241,6 +318,7 @@ function scopeList(briefing: Briefing, artIncluded: boolean): string[] {
   if (artIncluded) {
     lines.push("Projeto executivo, ART CREA-SP e documentação as-built entregues ao final da obra.");
   }
+
   if (briefing.maintenance) {
     lines.push("Manutenção preventiva mensal inclusa no contrato de 12 meses.");
   }
@@ -281,7 +359,7 @@ export function buildSections(input: {
     briefing.cameras > 0 ? `${briefing.cameras} câmeras IP 4K` : "",
     briefing.doors > 0 ? `${briefing.doors} porta(s) com controle de acesso` : "",
     briefing.fenceMeters > 0 ? `${briefing.fenceMeters} m de cerca elétrica` : "",
-    briefing.alarm ? "alarme monitorado" : "",
+    briefing.alarm ? "alarme de intrusão" : "",
     briefing.intercom ? "interfonia IP" : "",
     "infraestrutura de rede e energia protegida",
   ]
@@ -290,9 +368,9 @@ export function buildSections(input: {
 
   const objeto = `Fornecimento, instalação, configuração e comissionamento de sistema de segurança eletrônica IP para ${client}, contemplando ${systemPieces}, treinamento operacional da equipe${artIncluded ? " e documentação técnica as-built ao final da obra" : ""}.\n\nLocal de instalação: ${location}. Segmento: ${briefing.segment.toLowerCase()}.`;
 
-  const empresa = `${brand.name} projeta, instala e mantém sistemas de segurança eletrônica IP. A empresa atua com engenharia e equipe técnica próprias, documentação completa — do projeto executivo ao as-built — e atendimento a condomínios, indústrias, varejo, clínicas e residências na região de atuação. Registro técnico: ${defaultGeneratorSettings.crea} · CNPJ ${defaultGeneratorSettings.cnpj}.\n\nCada equipamento é especificado individualmente; o escopo, os testes e as responsabilidades constam nos blocos seguintes.`;
+  const empresa = `${brand.name} projeta, instala e mantém sistemas de segurança eletrônica IP desde 2014. São 480 instalações entregues, 1.240 câmeras em campo e atendimento técnico próprio.\n\nA empresa atua com engenharia e equipe técnica próprias, documentação completa — do projeto executivo ao as-built — e atendimento a condomínios, indústrias, varejo, clínicas e residências de alto padrão na Grande São Paulo. Registro técnico: ${defaultGeneratorSettings.crea} · CNPJ ${defaultGeneratorSettings.cnpj}.\n\nTrabalhamos com números antes de adjetivos: cada equipamento é especificado, não vendido como “alta qualidade”.`;
 
-  const objetivo = `Reduzir pontos cegos e dar previsibilidade à operação de segurança de ${client}, permitindo identificar eventos, manter registro de imagens pelo período definido no escopo e controlar quem entra — e quando entra — em cada acesso.\n\nAs notificações e o acesso às imagens são configurados nos equipamentos e aplicativos previstos na proposta; a operação diária fica sob responsabilidade do cliente.${
+  const objetivo = `Reduzir pontos cegos e dar previsibilidade à operação de segurança de ${client}, permitindo identificar e reagir a um evento em menos de 8 segundos, manter registro de imagens por 30 dias e controlar quem entra — e quando entra — em cada acesso.\n\nO sistema deve ser entregue com alerta imediato ao responsável técnico do cliente.${
     briefing.priority === "orcamento"
       ? "\n\nDado o foco em orçamento, a proposta prioriza o perímetro crítico e organiza o restante em fases, preservando a possibilidade de expansão sem substituição de equipamentos."
       : briefing.priority === "prazo"
@@ -356,7 +434,7 @@ export function buildSections(input: {
     "Interrupções no fornecimento de energia, danos por terceiros, vandalismo e descargas atmosféricas não são de responsabilidade da Cipriano.",
     "Os prazos são contados em dias úteis e começam no aceite formal e na liberação de obra (e não na emissão desta proposta).",
     "Alterações de escopo somente são executadas após orçamento complementar aprovado por escrito; nenhuma mudança é feita por acordo verbal.",
-    "Reajuste anual pelo índice acordado, quando houver contrato de manutenção com vigência recorrente.",
+    "Reajuste anual pelo IPCA para contratos de manutenção após 12 meses.",
     "O tratamento de imagens e dados de acesso deve observar a política de uso do cliente e a LGPD; a Cipriano atua como operadora técnica.",
   ]);
 
@@ -387,7 +465,8 @@ export function buildSections(input: {
       ])}\n\nA documentação é entregue em PDF, organizada por disciplina, e também fica disponível no painel Cipriano do cliente.`
     : `A emissão de ART, o projeto executivo detalhado e a documentação as-built não estão inclusos nesta proposta.\n\nPara obras de maior valor, condomínios e exigências de síndico ou seguradora, recomendamos incluir esse pacote: ele documenta a responsabilidade técnica, garante rastreabilidade e reduz questionamentos futuros. Pode ser acrescido por aditivo, com valor informado à parte.`;
 
-  const valor = `O investimento total desta proposta é apresentado abaixo, com desconto comercial já aplicado. Valores em reais (BRL), válidos na data de emissão.\n\nO resumo de itens, quantidades e preços unitários está detalhado no bloco de produtos e serviços. A quantidade e os valores das parcelas são calculados no resumo e podem ser ajustados para refletir a condição de pagamento acordada entre as partes.`;
+  const parcelas = Math.min(48, Math.max(1, Math.round(briefing.valueBlock?.installments ?? 12)));
+  const valor = `O investimento total desta proposta é apresentado abaixo, com desconto comercial já aplicado. Valores em reais (BRL), com impostos inclusos, válidos pela data de emissão.\n\nO resumo de itens, quantidades e preços unitários está detalhado no bloco de produtos e serviços. O parcelamento sugerido é de ${parcelas}× sem juros no cartão corporativo ou conforme condição de pagamento acordada.`;
 
   const condicoes = bullets([
     `Pagamento: ${defaultGeneratorSettings.defaultPaymentTerms}.`,
@@ -404,7 +483,7 @@ export function buildSections(input: {
     `Mobilização em até 3 dias úteis após a entrada e a aprovação do projeto executivo.`,
     "Cronograma típico: semana 1 infraestrutura · semana 2 instalação e configuração · semana 3 comissionamento, treinamento e entrega.",
     "Atrasos por falta de energia, acesso, obra civil ou aprovação do cliente deslocam o cronograma na mesma proporção, com registro por e-mail.",
-    "Serviços de manutenção previstos na proposta iniciam após o termo de comissionamento.",
+    "A manutenção inicia após o termo de comissionamento.",
   ])}\n\n${deliveryTime}`;
 
   const garantia = `${bullets([
@@ -412,7 +491,7 @@ export function buildSections(input: {
     "Cobertura de equipamentos conforme fabricante, com intermediação da Cipriano no acionamento da garantia.",
     "Garantia de mão de obra cobre instalação, configuração, passagem de cabos, fixes e comissionamento.",
     "Não cobertos: vandalismo, furto, descargas atmosféricas, intervenção de terceiros, sobrecarga elétrica e falta de manutenção preventiva contratada.",
-    "Chamados de garantia são avaliados e agendados conforme as condições comerciais e a disponibilidade técnica acordada.",
+    "Atendimento remoto em até 4 h úteis e visita técnica em até 24 h úteis na Grande São Paulo.",
     "Peças fora de garantia são orçadas previamente e só substituídas após aprovação.",
   ])}`;
 
@@ -550,7 +629,7 @@ export function generateProposal(input: {
 }): ProposalDraft {
   const settings = { ...defaultGeneratorSettings, ...input.settings };
   if (input.briefing.purpose === "manutencao_mensal") return generateMaintenanceProposal({ ...input, settings });
-  const briefing: Briefing = { ...input.briefing, monitoring: false };
+  const briefing = input.briefing;
   const artIncluded = input.artIncluded ?? input.type === "completa";
   const validityDays = input.validityDays ?? settings.defaultValidityDays;
   const discountPct = input.discountPct ?? suggestDiscount(briefing, input.type);
@@ -588,13 +667,70 @@ export function generateProposal(input: {
   };
 }
 
+/**
+ * Custos indiretos sobre os equipamentos: miscelâneas, infraestrutura seca e margem de segurança.
+ * Recalculado sempre que os equipamentos mudam (inclusive produtos do catálogo).
+ * Percentuais em 0 desativam a linha. Não se aplica à manutenção mensal.
+ */
+export function indirectCostItems(items: ProposalItem[], briefing: Briefing): ProposalItem[] {
+  const equipmentCents = items
+    .filter((i) => i.kind === "equipamento" && i.auto !== "indirect")
+    .reduce((sum, i) => sum + Math.round(i.price * 100) * Math.max(0, i.qty), 0);
+  if (equipmentCents <= 0) return [];
+  const pct = (value: number | undefined, fallback: number) =>
+    Math.min(100, Math.max(0, value === undefined || Number.isNaN(value) ? fallback : value));
+  const misc = pct(briefing.miscPct, 8);
+  const infra = pct(briefing.infraPct, 10);
+  const margin = pct(briefing.marginPct, 5);
+  const line = (desc: string, spec: string, pctValue: number, scope: string): ProposalItem => ({
+    id: uid("ind"),
+    kind: "equipamento",
+    desc,
+    spec: `${spec} (${pctValue}% sobre equipamentos)`,
+    unit: "vb",
+    qty: 1,
+    price: Math.round((equipmentCents * pctValue) / 100) / 100,
+    scope,
+    auto: "indirect",
+  });
+  const out: ProposalItem[] = [];
+  if (misc > 0)
+    out.push(
+      line(
+        "Miscelâneas de instalação e fixação",
+        "Conectores blindados, buchas, parafusos, abraçadeiras, caixas de passagem e vedação",
+        misc,
+        "Rede e Infraestrutura",
+      ),
+    );
+  if (infra > 0)
+    out.push(
+      line(
+        "Infraestrutura seca, eletrodutos e canaletas",
+        "Eletrodutos rígidos/flexíveis, canaletas de proteção, curvas, conexões e suportes",
+        infra,
+        "Rede e Infraestrutura",
+      ),
+    );
+  if (margin > 0)
+    out.push(
+      line(
+        "Margem de segurança e contingência técnica",
+        "Reserva técnica para adequações de campo, sobras de cabos e tolerância técnica",
+        margin,
+        "Itens Complementares",
+      ),
+    );
+  return out;
+}
+
 export const SECTION_LIBRARY: { title: string; body: string; kind?: ProposalSection["kind"] }[] = [
   {
     title: "SLA e Níveis de Serviço",
     body: bullets([
       "Atendimento remoto em até 4 h úteis para chamados críticos.",
       "Visita técnica em até 24 h úteis na Grande São Paulo.",
-      "Disponibilidade mensal alvo de 99,5%, medida pelo NOC.",
+      "Disponibilidade mensal alvo de 99,5%, com relatório de chamados.",
       "Relatório mensal de chamados, disponibilidade e manutenções.",
     ]),
   },
@@ -626,6 +762,6 @@ export const SECTION_LIBRARY: { title: string; body: string; kind?: ProposalSect
   },
   {
     title: "Anexo — Topologia Proposta",
-    body: "As câmeras IP são alimentadas e transportadas por um único cabo Cat6 blindado (PoE 802.3af) até o switch gerenciável do rack central. O NVR grava em circuito local, com espelhamento noturno para a nuvem e acesso remoto pelo app Cipriano View (iOS/Android).\n\nO perímetro usa central monitorada com bateria selada (autonomia de 12 h) e sirene de 110 dB. Eventos geram push no celular do responsável e clipe de 15 s no NOC.",
+    body: "As câmeras IP são alimentadas e transportadas por um único cabo Cat6 blindado (PoE 802.3af) até o switch gerenciável do rack central. O NVR grava em circuito local, com espelhamento noturno para a nuvem e acesso remoto pelo app Cipriano View (iOS/Android).\n\nO perímetro usa central de alarme com bateria selada (autonomia de 12 h) e sirene de 110 dB. Eventos geram alerta no celular do responsável com clipe de 15 s.",
   },
 ];

@@ -64,48 +64,28 @@ export async function ensureBootstrap() {
   await bootstrapped;
 }
 
-const PROPOSAL_NUMBER_LOCK = 727_001;
-
-type NumberReader = Pick<typeof db, "select">;
-
-/**
- * A numeração acompanha as propostas que existem de verdade:
- * próximo = maior sequência existente + 1. Excluir a última libera o número para a próxima;
- * excluir uma do meio não gera retrocesso, pois a sequência continua depois da maior em uso.
- */
-async function computeNextSequence(reader: NumberReader): Promise<number> {
-  const rows = await reader.select({ number: proposals.number }).from(proposals);
-  let highest = 0;
-  for (const row of rows) {
-    const match = /^CTS-\d{4}-(\d+)/.exec(row.number);
-    if (match) highest = Math.max(highest, Number(match[1]));
-  }
-  return highest + 1;
-}
-
-const formatProposalNumber = (sequence: number) =>
-  `CTS-${new Date().getFullYear()}-${String(sequence).padStart(4, "0")}`;
-
-/** Apenas consulta (sem reservar) — usado para exibir "próximo número" na tela. */
 export async function nextProposalNumber(): Promise<string> {
-  return formatProposalNumber(await computeNextSequence(db));
-}
-
-/**
- * Reserva o próximo número dentro de uma transação protegida por lock do PostgreSQL,
- * evitando números repetidos quando duas propostas são criadas ao mesmo tempo.
- */
-export async function withNextProposalNumber<T>(
-  work: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0], number: string) => Promise<T>,
-): Promise<T> {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(${PROPOSAL_NUMBER_LOCK})`);
-    const sequence = await computeNextSequence(tx);
-    const result = await work(tx, formatProposalNumber(sequence));
-    // Mantém o contador legado coerente com a numeração real.
-    await tx.update(appSettings).set({ proposalCounter: sequence, updatedAt: new Date() });
-    return result;
-  });
+  const year = new Date().getFullYear();
+  // Analisa todas as propostas existentes no banco para o ano corrente.
+  // Se a última proposta foi excluída (ex.: 002 e não existe 003), a próxima será 002.
+  // Se o usuário já continuou criando outras (ex.: excluiu 002 mas já tem 003), a próxima será 004.
+  const all = await db.select({ number: proposals.number }).from(proposals);
+  const regex = new RegExp(`^CTS-${year}-(\\d+)$`);
+  let maxSeq = 0;
+  for (const p of all) {
+    const match = p.number.match(regex);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num > maxSeq) maxSeq = num;
+    }
+  }
+  const nextSeq = maxSeq + 1;
+  const settings = await getSettings();
+  await db
+    .update(appSettings)
+    .set({ proposalCounter: nextSeq, updatedAt: new Date() })
+    .where(eq(appSettings.id, settings.id));
+  return `CTS-${year}-${String(nextSeq).padStart(4, "0")}`;
 }
 
 export async function listClients(): Promise<ClientRow[]> {

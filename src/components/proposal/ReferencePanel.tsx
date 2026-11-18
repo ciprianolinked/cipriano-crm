@@ -86,10 +86,17 @@ export function ReferencePanel({
     setLoadError("");
     try {
       const data = await fetchJson<{ files: ReferenceFile[] }>("/api/references");
-      setFiles(data.files);
+      setFiles(data.files ?? []);
     } catch (err) {
-      // A lista não carregou, mas o painel continua utilizável para novo envio.
-      setLoadError(errorMessage(err));
+      // Se a rota ainda estiver em deploy ou retornar 404, não bloqueia o uso do painel
+      const msg = errorMessage(err);
+      if (msg.includes("404") || msg.includes("HTML")) {
+        setLoadError(
+          "As rotas de referência (/api/references) foram incluídas nesta atualização do projeto. Caso esteja testando em um deploy antigo na Vercel, publique o novo commit e confira /api/health.",
+        );
+      } else {
+        setLoadError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -120,7 +127,7 @@ export function ReferencePanel({
       const form = new FormData();
       form.append("file", file);
       try {
-        const response = await fetch(`${window.location.origin}/api/references`, {
+        const response = await fetch("/api/references", {
           method: "POST",
           body: form,
           signal: controller.current?.signal,

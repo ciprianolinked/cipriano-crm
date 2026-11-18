@@ -80,7 +80,7 @@ export default async function ProposalEditorPage({ params }: { params: Promise<{
         crea: settings.crea,
         hours: settings.hours,
       }}
-      catalog={catalog.map((c) => ({
+      catalog={catalog.filter((c) => c.active).map((c) => ({
         id: c.id,
         kind: c.kind,
         category: c.category,

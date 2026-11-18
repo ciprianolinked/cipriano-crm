@@ -41,9 +41,9 @@ export const SCOPE_DEFINITIONS: { id: ScopeId; name: string; keywords: RegExp[];
   },
   {
     id: "monitoramento",
-    name: "Monitoramento e NOC",
+    name: "Suporte remoto e nuvem",
     service: true,
-    keywords: [/monitoramento/, /\bnoc\b/, /ronda virtual/, /24 ?h/, /suporte remoto/, /nuvem/, /aplicativo|\bapp\b/],
+    keywords: [/suporte remoto/, /nuvem/, /aplicativo|\bapp\b/],
   },
   {
     id: "manutencao",
@@ -299,41 +299,10 @@ function parseRow(cells: string[], fileHint: string): ParsedRow | null {
 /* Análise por documento                                                      */
 /* -------------------------------------------------------------------------- */
 
-const QTY_UNIT_PREFIX =
-  /^(\d{1,4})\s*(un|und|unid|unidades?|p[cç]|pe[cç]as?|vb|m|mt|m²|m2|kit|cj|conj|portas?|pontos?|c[aâ]meras?|cams?|m[eê]s|meses|horas?|h|x|×)\b\.?\s*[-–:x×]?\s*(.+)$/i;
-
-/**
- * Quebra uma linha de texto corrido em células, como se fossem colunas:
- * [quantidade] [unidade] [descrição] [valor unitário] [valor total].
- * Aceita "8 un - Câmera IP - R$ 1.290,00 - R$ 10.320,00", colunas com ; ou tabulação e barras verticais.
- */
 function textToCells(line: string): string[] {
   if (line.includes("|")) return line.split("|").map((cell) => cell.trim()).filter(Boolean);
-  if (/[;\t]/.test(line)) return line.split(/\s*[;\t]\s*/).map((cell) => cell.trim()).filter(Boolean);
-
-  const cells: string[] = [];
-  let last = 0;
-  for (const match of line.matchAll(MONEY)) {
-    const start = match.index ?? 0;
-    const before = line.slice(last, start).replace(/[\s\-–:]+$/, "").trim();
-    if (before) cells.push(before);
-    cells.push(match[0].trim());
-    last = start + match[0].length;
-  }
-  const rest = line.slice(last).replace(/^[\s\-–:]+/, "").trim();
-  if (rest) cells.push(rest);
-  if (!cells.length) return [line];
-
-  // "8 un - Descrição": separa quantidade e unidade da descrição (a unidade é obrigatória, para não confundir com nº do item).
-  const prefix = QTY_UNIT_PREFIX.exec(cells[0]);
-  if (prefix && cells.length > 1) {
-    const token = prefix[2].toLowerCase();
-    const unit = /^(x|×)$/.test(token)
-      ? []
-      : [/^m[eê]s(es)?$/.test(token) ? "mês" : /^und?(id)?/.test(token) ? "un" : /^pe[cç]/.test(token) ? "pç" : /^c[aâ]mera|^cam/.test(token) ? "un" : /^horas?$/.test(token) ? "h" : token];
-    cells.splice(0, 1, prefix[1], ...unit, prefix[3].trim());
-  }
-  return cells;
+  // Texto corrido: separa preços e quantidades sem perder a descrição.
+  return [line];
 }
 
 function analyzeDocument(doc: ReferenceDocumentInput) {
@@ -344,7 +313,7 @@ function analyzeDocument(doc: ReferenceDocumentInput) {
   const usedLayout = Boolean(layout);
 
   const rows: string[][] = [];
-  if (layout) rows.push(...layout.map((cells) => (cells.length === 1 ? textToCells(cells[0]) : cells)));
+  if (layout) rows.push(...layout);
   else {
     for (const line of source.split(/\r?\n/)) {
       const trimmed = line.trim();
@@ -595,7 +564,7 @@ export function buildMatchedProposal(input: MatchedProposalInput): ProposalDraft
     add(
       "empresa",
       "Cipriano Tech & Security",
-      `${settings.companyName} atua em projetos, instalação, manutenção e monitoramento de segurança eletrônica. Responsável técnico: ${settings.director} · ${settings.crea} · CNPJ ${settings.cnpj}.`,
+      `${settings.companyName} atua em projetos, instalação e manutenção de segurança eletrônica. Responsável técnico: ${settings.director} · ${settings.crea} · CNPJ ${settings.cnpj}.`,
     );
     add(
       "objetivo",
@@ -681,7 +650,7 @@ export function buildMatchedProposal(input: MatchedProposalInput): ProposalDraft
     ...defaultBriefing,
     purpose: "projeto",
     maintenance: false,
-    monitoring: analysis.scopes.some((scope) => scope.id === "monitoramento"),
+    monitoring: false,
     notes: analysis.note,
   };
 

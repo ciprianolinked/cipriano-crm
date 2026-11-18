@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS public.catalog_items (
   created_at timestamptz DEFAULT now() NOT NULL
 );
 
+-- Histórico de revisão de preços do fornecedor (justificativa de reajustes).
 CREATE TABLE IF NOT EXISTS public.catalog_price_revisions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   item_id uuid NOT NULL,
@@ -151,30 +152,6 @@ CREATE TABLE IF NOT EXISTS public.maintenance_document_revisions (
   created_at timestamptz DEFAULT now() NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS public.delivery_terms (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  number text NOT NULL,
-  proposal_id uuid,
-  proposal_number text NOT NULL,
-  proposal_revision integer DEFAULT 1 NOT NULL,
-  client_id uuid,
-  client_name text NOT NULL,
-  contact text,
-  client_email text,
-  site text,
-  title text DEFAULT 'Termo de entrega e aceite' NOT NULL,
-  delivery_date text NOT NULL,
-  status text DEFAULT 'rascunho' NOT NULL,
-  items jsonb DEFAULT '[]'::jsonb NOT NULL,
-  sections jsonb DEFAULT '[]'::jsonb NOT NULL,
-  generated_by_ai boolean DEFAULT false NOT NULL,
-  created_at timestamptz DEFAULT now() NOT NULL,
-  updated_at timestamptz DEFAULT now() NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS delivery_terms_number_unique ON public.delivery_terms (number);
-CREATE INDEX IF NOT EXISTS delivery_terms_proposal_idx ON public.delivery_terms (proposal_id);
-CREATE INDEX IF NOT EXISTS delivery_terms_created_idx ON public.delivery_terms (created_at);
-
 CREATE TABLE IF NOT EXISTS public.ipca_history (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   month text NOT NULL,
@@ -208,11 +185,33 @@ CREATE TABLE IF NOT EXISTS public.reference_files (
   created_at timestamptz DEFAULT now() NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS public.delivery_terms (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  proposal_id uuid,
+  term_number text NOT NULL,
+  client_name text NOT NULL,
+  site text,
+  delivery_date timestamptz,
+  technician text DEFAULT '' NOT NULL,
+  receiver_name text DEFAULT '' NOT NULL,
+  receiver_doc text DEFAULT '' NOT NULL,
+  items jsonb DEFAULT '[]'::jsonb NOT NULL,
+  intro text DEFAULT '' NOT NULL,
+  scope_summary text DEFAULT '' NOT NULL,
+  tests text DEFAULT '' NOT NULL,
+  pendencies text DEFAULT '' NOT NULL,
+  warranty text DEFAULT '' NOT NULL,
+  observations text DEFAULT '' NOT NULL,
+  status text DEFAULT 'rascunho' NOT NULL,
+  created_at timestamptz DEFAULT now() NOT NULL,
+  updated_at timestamptz DEFAULT now() NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS public.app_settings (
   id text PRIMARY KEY DEFAULT 'default' NOT NULL,
   company_name text DEFAULT 'Cipriano Tech & Security' NOT NULL,
   legal_name text DEFAULT 'Cipriano Tecnologia e Segurança Eletrônica LTDA' NOT NULL,
-  tagline text DEFAULT 'Segurança eletrônica IP · Projetos, instalação e monitoramento' NOT NULL,
+  tagline text DEFAULT 'Segurança eletrônica IP · Projetos, instalação e manutenção' NOT NULL,
   director text DEFAULT 'Gabriel Cipriano' NOT NULL,
   role text DEFAULT 'Diretor Técnico' NOT NULL,
   phone text DEFAULT '+55 (12) 99701-1890' NOT NULL,
@@ -222,7 +221,7 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
   address text DEFAULT 'Alameda Raul Roldão da Costa, 183 - Vila Betania, São José dos Campos - SP, 12245-484' NOT NULL,
   cnpj text DEFAULT '69.978.603/0001-69' NOT NULL,
   crea text DEFAULT 'CREA-SP 5071138295-SP' NOT NULL,
-  hours text DEFAULT 'NOC 24h · Comercial seg–sex 8h–18h' NOT NULL,
+  hours text DEFAULT 'Comercial seg–sex 8h–18h · Suporte técnico sob contrato' NOT NULL,
   default_validity_days integer DEFAULT 15 NOT NULL,
   default_payment_terms text DEFAULT '40% de entrada na assinatura · 60% na entrega técnica (ou 12× no cartão corporativo)' NOT NULL,
   default_delivery_time text DEFAULT '12 dias úteis após aceite e liberação da obra' NOT NULL,
@@ -281,6 +280,49 @@ CREATE UNIQUE INDEX IF NOT EXISTS economic_index_month_unique
 INSERT INTO public.app_settings (id) VALUES ('default')
 ON CONFLICT (id) DO NOTHING;
 
+-- A empresa não oferece monitoramento 24h: atualiza apenas linhas que ainda
+-- têm os textos antigos padrão, sem tocar em personalizações do usuário.
+UPDATE public.app_settings
+SET tagline = 'Segurança eletrônica IP · Projetos, instalação e manutenção',
+    updated_at = now()
+WHERE tagline = 'Segurança eletrônica IP · Projetos, instalação e monitoramento';
+UPDATE public.app_settings
+SET hours = 'Comercial seg–sex 8h–18h · Suporte técnico sob contrato',
+    updated_at = now()
+WHERE hours = 'NOC 24h · Comercial seg–sex 8h–18h';
+
+-- Monitoramento 24h foi removido do escopo comercial. Sem apagar nada:
+-- 1) o item de catálogo fica inativo (não aparece mais nas propostas);
+-- 2) nas propostas salvas, as linhas desse serviço saem dos itens e os totais são recalculados.
+UPDATE public.catalog_items
+SET active = false
+WHERE active = true
+  AND description ~* '(monitoramento.*noc|noc\s*24|monitoramento\s*24)';
+
+UPDATE public.proposals p
+SET subtotal_cents = r.sub_cents,
+    total_cents = ROUND(r.sub_cents * (100 - p.discount_pct) / 100.0)::int,
+    updated_at = now()
+FROM (
+  SELECT p2.id,
+         COALESCE(SUM(ROUND((e->>'price')::numeric * 100) * GREATEST((e->>'qty')::numeric, 0)), 0)::int AS sub_cents
+  FROM public.proposals p2
+  LEFT JOIN LATERAL jsonb_array_elements(p2.items) e
+    ON NOT (COALESCE(e->>'desc', '') ~* '(monitoramento.*noc|noc\s*24|monitoramento\s*24)')
+  WHERE p2.items::text ~* '(monitoramento.*noc|noc\s*24|monitoramento\s*24)'
+  GROUP BY p2.id
+) r
+WHERE r.id = p.id;
+
+UPDATE public.proposals p
+SET items = COALESCE((
+      SELECT jsonb_agg(e)
+      FROM jsonb_array_elements(p.items) e
+      WHERE NOT (COALESCE(e->>'desc', '') ~* '(monitoramento.*noc|noc\s*24|monitoramento\s*24)')
+    ), '[]'::jsonb),
+    updated_at = now()
+WHERE p.items::text ~* '(monitoramento.*noc|noc\s*24|monitoramento\s*24)';
+
 COMMIT;
 
 -- Confirmação: o resultado deve ser 13 no database selecionado.
@@ -289,7 +331,8 @@ FROM pg_tables
 WHERE schemaname = 'public'
   AND tablename IN (
     'clients', 'proposals', 'activities', 'catalog_items',
-    'catalog_price_revisions', 'maintenance_contracts', 'maintenance_readjusts',
-    'maintenance_document_revisions', 'delivery_terms', 'ipca_history',
-    'economic_index_values', 'reference_files', 'app_settings'
+    'catalog_price_revisions', 'maintenance_contracts',
+    'maintenance_readjusts', 'maintenance_document_revisions',
+    'ipca_history', 'economic_index_values', 'reference_files',
+    'delivery_terms', 'app_settings'
   );

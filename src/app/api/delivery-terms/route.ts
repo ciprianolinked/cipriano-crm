@@ -1,69 +1,129 @@
 import { NextResponse } from "next/server";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { deliveryTerms, proposals } from "@/db/schema";
-import { sanitizeDeliveryItems, sanitizeDeliverySections } from "@/lib/delivery-terms";
+import { deliveryTerms, proposals, type DeliveryTermItem } from "@/db/schema";
+import { ensureSchema } from "@/lib/db-migrations";
+import { getSettings } from "@/lib/data";
+import {
+  buildDeliveryTermDraft,
+  nextTermNumber,
+  polishDeliveryTermWithAI,
+} from "@/lib/delivery-term";
 
 export const dynamic = "force-dynamic";
-const DELIVERY_NUMBER_LOCK = 727_003;
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
-export async function GET() {
-  const rows = await db.select().from(deliveryTerms).orderBy(desc(deliveryTerms.createdAt));
-  return NextResponse.json({ terms: rows });
+function serialize(row: typeof deliveryTerms.$inferSelect) {
+  return {
+    ...row,
+    deliveryDate: row.deliveryDate ? row.deliveryDate.toISOString() : null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export async function GET(request: Request) {
+  await ensureSchema();
+  const { searchParams } = new URL(request.url);
+  const proposalId = searchParams.get("proposalId");
+  const rows = proposalId
+    ? await db
+        .select()
+        .from(deliveryTerms)
+        .where(eq(deliveryTerms.proposalId, proposalId))
+        .orderBy(desc(deliveryTerms.createdAt))
+    : await db.select().from(deliveryTerms).orderBy(desc(deliveryTerms.createdAt));
+  return NextResponse.json({ terms: rows.map(serialize) });
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const proposalId = String(body.proposalId ?? "");
-  const proposalRows = proposalId
-    ? await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1)
-    : [];
-  const proposal = proposalRows[0];
-  if (!proposal) return NextResponse.json({ error: "Proposta vinculada não encontrada." }, { status: 404 });
-  if (proposal.status !== "ganho") {
-    return NextResponse.json({ error: "A proposta precisa estar marcada como ganha." }, { status: 409 });
-  }
+  await ensureSchema();
+  const body = (await request.json().catch(() => ({}))) as {
+    proposalId?: string;
+    polish?: boolean;
+  };
+  const proposalId = String(body.proposalId ?? "").trim();
+  if (!proposalId) return NextResponse.json({ error: "Informe a proposta de origem." }, { status: 400 });
 
-  const existing = await db.select({ id: deliveryTerms.id, number: deliveryTerms.number })
-    .from(deliveryTerms).where(eq(deliveryTerms.proposalId, proposalId)).limit(1);
-  if (existing[0]) return NextResponse.json({ error: "Já existe um termo de entrega para esta proposta.", term: existing[0] }, { status: 409 });
+  const [proposal] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
+  if (!proposal) return NextResponse.json({ error: "Proposta não encontrada." }, { status: 404 });
 
-  const sections = sanitizeDeliverySections(body.sections);
-  if (sections.length < 3) return NextResponse.json({ error: "Gere ou inclua ao menos três blocos no termo." }, { status: 400 });
-  const deliveryDate = String(body.deliveryDate ?? "").slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate) || Number.isNaN(Date.parse(`${deliveryDate}T12:00:00Z`))) {
-    return NextResponse.json({ error: "Informe uma data de entrega válida." }, { status: 400 });
-  }
+  const settings = await getSettings();
+  const existing = await db.select({ termNumber: deliveryTerms.termNumber }).from(deliveryTerms);
+  const draft = buildDeliveryTermDraft(
+    {
+      id: proposal.id,
+      number: proposal.number,
+      type: proposal.type,
+      clientName: proposal.clientName,
+      contact: proposal.contact,
+      site: proposal.site,
+      totalCents: proposal.totalCents,
+      warranty: proposal.warranty,
+      deliveryTime: proposal.deliveryTime,
+      items: proposal.items,
+    },
+    {
+      companyName: settings.companyName,
+      legalName: settings.legalName,
+      director: settings.director,
+      role: settings.role,
+      phone: settings.phone,
+      email: settings.email,
+      site: settings.site,
+      address: settings.address,
+      cnpj: settings.cnpj,
+      crea: settings.crea,
+    },
+    nextTermNumber(existing.map((r) => r.termNumber)),
+  );
 
-  const row = await db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(${DELIVERY_NUMBER_LOCK})`);
-    const all = await tx.select({ number: deliveryTerms.number }).from(deliveryTerms);
-    const year = new Date().getFullYear();
-    let highest = 0;
-    for (const item of all) {
-      const match = /^TDE-\d{4}-(\d+)/.exec(item.number);
-      if (match) highest = Math.max(highest, Number(match[1]));
+  let aiNote = "Minuta estruturada a partir da proposta. Revise cada campo antes de assinar.";
+  if (body.polish !== false) {
+    const polished = await polishDeliveryTermWithAI(draft, {
+      id: proposal.id,
+      number: proposal.number,
+      type: proposal.type,
+      clientName: proposal.clientName,
+      contact: proposal.contact,
+      site: proposal.site,
+      totalCents: proposal.totalCents,
+      warranty: proposal.warranty,
+      deliveryTime: proposal.deliveryTime,
+      items: proposal.items,
+    });
+    if (polished) {
+      draft.intro = polished.intro;
+      draft.scopeSummary = polished.scopeSummary;
+      draft.tests = polished.tests;
+      aiNote = "Redação refinada por IA a partir dos dados da proposta. Confira números e escopo antes de assinar.";
+    } else {
+      aiNote += " IA generativa indisponível no momento; a minuta estruturada foi preservada.";
     }
-    const number = `TDE-${year}-${String(highest + 1).padStart(4, "0")}`;
-    const items = sanitizeDeliveryItems(body.items ?? proposal.items);
-    const [created] = await tx.insert(deliveryTerms).values({
-      number,
-      proposalId,
-      proposalNumber: proposal.number,
-      proposalRevision: proposal.revision,
-      clientId: proposal.clientId,
-      clientName: String(body.clientName ?? proposal.clientName).trim().slice(0, 300),
-      contact: String(body.contact ?? proposal.contact ?? "").trim().slice(0, 200) || null,
-      clientEmail: String(body.clientEmail ?? proposal.clientEmail ?? "").trim().slice(0, 300) || null,
-      site: String(body.site ?? proposal.site ?? "").trim().slice(0, 500) || null,
-      title: String(body.title ?? "Termo de entrega e aceite técnico").trim().slice(0, 200),
-      deliveryDate,
+  }
+
+  const [row] = await db
+    .insert(deliveryTerms)
+    .values({
+      proposalId: proposal.id,
+      termNumber: draft.termNumber,
+      clientName: draft.clientName,
+      site: draft.site,
+      deliveryDate: new Date(),
+      technician: draft.technician,
+      receiverName: draft.receiverName,
+      receiverDoc: draft.receiverDoc,
+      items: draft.items as DeliveryTermItem[],
+      intro: draft.intro,
+      scopeSummary: draft.scopeSummary,
+      tests: draft.tests,
+      pendencies: draft.pendencies,
+      warranty: draft.warranty,
+      observations: draft.observations,
       status: "rascunho",
-      items,
-      sections,
-      generatedByAi: body.generatedByAi === true,
-    }).returning();
-    return created;
-  });
-  return NextResponse.json({ term: row }, { status: 201 });
+    })
+    .returning();
+
+  return NextResponse.json({ term: serialize(row), aiNote }, { status: 201 });
 }
