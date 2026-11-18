@@ -1,7 +1,7 @@
 export const brand = {
   name: "Cipriano Tech & Security",
   legalName: "Cipriano Tecnologia e Segurança Eletrônica LTDA",
-  tagline: "Segurança eletrônica IP · Projetos, instalação e monitoramento",
+  tagline: "Segurança eletrônica IP · Projetos, instalação e manutenção",
   director: "Gabriel Cipriano",
   role: "Diretor Técnico",
   phone: "+55 (12) 99701-1890",
@@ -12,7 +12,7 @@ export const brand = {
   address: "Alameda Raul Roldão da Costa, 183 - Vila Betania, São José dos Campos - SP, 12245-484",
   cnpj: "69.978.603/0001-69",
   crea: "CREA-SP 5071138295-SP",
-  hours: "NOC 24h · Comercial seg–sex 8h–18h",
+  hours: "Atendimento comercial · seg–sex 8h–18h",
   colors: {
     navy: "#0A192F",
     abyss: "#050C18",
@@ -36,13 +36,13 @@ export const brand = {
     { k: "12", u: "anos", l: "projetando perímetros" },
     { k: "480", u: "+", l: "instalações entregues" },
     { k: "1.240", u: "", l: "câmeras IP em campo" },
-    { k: "99,98", u: "%", l: "uptime médio do NOC" },
+    { k: "CREA-SP", u: "", l: "engenharia responsável" },
   ],
   capabilities: [
     "CFTV IP",
     "Controle de acesso",
     "Cerca elétrica",
-    "Alarme monitorado",
+    "Sistemas de alarme",
     "Redes & PoE",
     "Analítico de vídeo",
     "Interfonia IP",

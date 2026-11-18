@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, proposals } from "@/db/schema";
-import { ensureBootstrap, nextProposalNumber } from "@/lib/data";
+import { ensureBootstrap, withNextProposalNumber } from "@/lib/data";
+import { applyExtras, readExtras } from "@/lib/proposal/extras";
+import { isMaintenanceProposal } from "@/lib/proposal/maintenance-plan";
 import { calcTotals, defaultBriefing } from "@/lib/proposal/catalog";
 import { generateProposal } from "@/lib/proposal/generate";
 import { validateMaintenancePlan } from "@/lib/proposal/maintenance-plan";
@@ -78,58 +80,65 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Informe o nome do cliente." }, { status: 400 });
   }
 
+  // Os adicionais (miscelâneas, infraestrutura, margem e mão de obra) são recalculados no servidor
+  // para garantir que o valor salvo bata com os percentuais informados. Manutenção mensal não usa.
+  if (!isMaintenanceProposal(draft.briefing)) {
+    draft.items = applyExtras(draft.items, readExtras(draft.briefing));
+  }
   const totals = calcTotals(draft.items, draft.discountPct);
-  const number = await nextProposalNumber();
   const status = body.status ?? "novo";
   const followUpDays = body.followUpDays ?? 2;
   const nextActionAt = status === "novo" ? new Date() : new Date(Date.now() + followUpDays * 86_400_000);
 
-  const [row] = await db
-    .insert(proposals)
-    .values({
-      number,
-      type: draft.type,
-      status,
-      clientId: body.clientId ?? null,
-      clientName: draft.clientName,
-      contact: draft.contact,
-      clientEmail: draft.clientEmail,
-      site: draft.site,
-      validityDays: draft.validityDays,
-      discountPct: draft.discountPct,
-      items: draft.items,
-      sections: draft.sections,
-      paymentTerms: draft.paymentTerms,
-      deliveryTime: draft.deliveryTime,
-      warranty: draft.warranty,
-      artIncluded: draft.artIncluded,
-      subtotalCents: totals.subtotalCents,
-      totalCents: totals.totalCents,
-      briefing: draft.briefing as unknown as Record<string, unknown>,
-      nextActionAt,
-      nextActionNote:
-        status === "novo"
-          ? "Revisar proposta e enviar ao cliente hoje."
-          : `Follow-up D+${followUpDays}: confirmar recebimento e perguntar quem decide.`,
-      sentAt: status === "enviada" || status === "negociacao" ? new Date() : null,
-    })
-    .returning();
+  const row = await withNextProposalNumber(async (tx, number) => {
+    const [created] = await tx
+      .insert(proposals)
+      .values({
+        number,
+        type: draft.type,
+        status,
+        clientId: body.clientId ?? null,
+        clientName: draft.clientName,
+        contact: draft.contact,
+        clientEmail: draft.clientEmail,
+        site: draft.site,
+        validityDays: draft.validityDays,
+        discountPct: draft.discountPct,
+        items: draft.items,
+        sections: draft.sections,
+        paymentTerms: draft.paymentTerms,
+        deliveryTime: draft.deliveryTime,
+        warranty: draft.warranty,
+        artIncluded: draft.artIncluded,
+        subtotalCents: totals.subtotalCents,
+        totalCents: totals.totalCents,
+        briefing: draft.briefing as unknown as Record<string, unknown>,
+        nextActionAt,
+        nextActionNote:
+          status === "novo"
+            ? "Revisar proposta e enviar ao cliente hoje."
+            : `Follow-up D+${followUpDays}: confirmar recebimento e perguntar quem decide.`,
+        sentAt: status === "enviada" || status === "negociacao" ? new Date() : null,
+      })
+      .returning();
 
-  await db.insert(activities).values({
-    proposalId: row.id,
-    kind: "sistema",
-    content: `Proposta ${number} gerada pelo motor Cipriano (${type}).`,
-    doneAt: new Date(),
-  });
-
-  if (status !== "novo") {
-    await db.insert(activities).values({
-      proposalId: row.id,
-      kind: "seguimento",
-      content: `Follow-up D+${followUpDays}: confirmar recebimento da proposta ${number}.`,
-      dueAt: nextActionAt,
+    await tx.insert(activities).values({
+      proposalId: created.id,
+      kind: "sistema",
+      content: `Proposta ${number} gerada pelo motor Cipriano (${type}).`,
+      doneAt: new Date(),
     });
-  }
+
+    if (status !== "novo") {
+      await tx.insert(activities).values({
+        proposalId: created.id,
+        kind: "seguimento",
+        content: `Follow-up D+${followUpDays}: confirmar recebimento da proposta ${number}.`,
+        dueAt: nextActionAt,
+      });
+    }
+    return created;
+  });
 
   return NextResponse.json({ proposal: row }, { status: 201 });
 }

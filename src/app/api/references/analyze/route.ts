@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { asc } from "drizzle-orm";
+import { db } from "@/db";
+import { referenceFiles } from "@/db/schema";
 import { getSettings } from "@/lib/data";
+import { ensureSchema } from "@/lib/db-migrations";
 import { calcTotals } from "@/lib/proposal/catalog";
-import type { GeneratorSettings } from "@/lib/proposal/generate";
 import { isProposalType, type ProposalType } from "@/lib/proposal/types";
 import {
   analyzeCompetitorDocuments,
@@ -9,82 +12,85 @@ import {
   matchedInsights,
   type ReferenceDocumentInput,
 } from "@/lib/references-analysis";
-import { ensureReferenceTable, listReferenceRows } from "@/lib/references-store";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
-export const maxDuration = 60;
-
-type AnalysisContext = {
-  type?: string;
-  clientName?: string;
-  contact?: string;
-  clientEmail?: string;
-  site?: string;
-  validityDays?: number;
-};
 
 export async function POST(request: Request) {
-  try {
-    await ensureReferenceTable();
-    const body = (await request.json().catch(() => ({}))) as AnalysisContext;
-    const settings = await getSettings();
-    const type: ProposalType = body.type && isProposalType(body.type) ? body.type : "completa";
-    const validityDays = Math.min(365, Math.max(1, Number(body.validityDays ?? settings.defaultValidityDays) || 15));
-    const rows = await listReferenceRows();
+  await ensureSchema();
+  const body = (await request.json().catch(() => ({}))) as {
+    type?: string;
+    clientName?: string;
+    contact?: string;
+    clientEmail?: string;
+    site?: string;
+    validityDays?: number;
+  };
 
-    const documents: ReferenceDocumentInput[] = rows.map((row) => ({
-      id: row.id,
-      fileName: row.fileName,
-      extractedText: row.extractedText ?? null,
-      manualText: row.manualText ?? null,
-      note: row.note ?? null,
-      pages: row.analysis?.pages ?? null,
-      layoutRows: row.layoutRows ?? null,
-    }));
+  const rows = await db
+    .select({
+      id: referenceFiles.id,
+      fileName: referenceFiles.fileName,
+      extractedText: referenceFiles.extractedText,
+      manualText: referenceFiles.manualText,
+      note: referenceFiles.note,
+      layoutRows: referenceFiles.layoutRows,
+      analysis: referenceFiles.analysis,
+    })
+    .from(referenceFiles)
+    .orderBy(asc(referenceFiles.createdAt));
 
-    const analysis = analyzeCompetitorDocuments(documents);
-    const generatorSettings: GeneratorSettings = {
-      defaultValidityDays: settings.defaultValidityDays,
-      defaultPaymentTerms: settings.defaultPaymentTerms,
-      defaultDeliveryTime: settings.defaultDeliveryTime,
-      defaultWarranty: settings.defaultWarranty,
-      companyName: settings.companyName,
-      legalName: settings.legalName,
-      director: settings.director,
-      role: settings.role,
-      crea: settings.crea,
-      cnpj: settings.cnpj,
-    };
-
-    const draft = buildMatchedProposal({
-      analysis,
-      type,
-      clientName: body.clientName ?? "",
-      contact: body.contact ?? "",
-      clientEmail: body.clientEmail ?? "",
-      site: body.site ?? "",
-      validityDays,
-      settings: generatorSettings,
-    });
-    const totals = calcTotals(draft.items, draft.discountPct);
-    const insights = matchedInsights(analysis, totals);
-
+  if (!rows.length) {
     return NextResponse.json(
-      {
-        analysis,
-        draft,
-        totals,
-        insights,
-        aiNote: `Proposta igualada a ${documents.length} arquivo(s) de referência. Escopos separados por disciplina, quantidades preservadas e nenhum desconto automático. Revise os preços antes de salvar.`,
-      },
-      { headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } },
-    );
-  } catch (error) {
-    console.error("[references] Falha na análise:", (error as Error)?.message);
-    return NextResponse.json(
-      { error: "Não foi possível analisar os arquivos. Confira /api/health e tente novamente." },
-      { status: 503 },
+      { error: "Envie ao menos uma proposta de referência antes de analisar." },
+      { status: 400 },
     );
   }
+
+  const docs: ReferenceDocumentInput[] = rows.map((row) => ({
+    id: row.id,
+    fileName: row.fileName,
+    extractedText: row.extractedText,
+    manualText: row.manualText,
+    note: row.note,
+    pages: row.analysis?.pages ?? null,
+    layoutRows: row.layoutRows ?? row.analysis?.layoutRows ?? null,
+  }));
+
+  const analysis = analyzeCompetitorDocuments(docs);
+  if (!analysis.items.length && analysis.matchedValue <= 0) {
+    return NextResponse.json(
+      {
+        error:
+          analysis.warnings[0] ??
+          "Nenhum equipamento ou valor legível encontrado. Em PDFs escaneados ou imagens, clique em Transcrever para colar os itens.",
+      },
+      { status: 400 },
+    );
+  }
+
+  const settings = await getSettings();
+  const type: ProposalType = body.type && isProposalType(body.type) ? body.type : "completa";
+  const validityDays = Math.max(1, Number(body.validityDays) || settings.defaultValidityDays || 15);
+
+  const draft = buildMatchedProposal({
+    analysis,
+    type,
+    clientName: String(body.clientName ?? "").trim() || "Cliente a definir",
+    contact: String(body.contact ?? "").trim(),
+    clientEmail: String(body.clientEmail ?? "").trim(),
+    site: String(body.site ?? "").trim(),
+    validityDays,
+    settings,
+  });
+
+  const totals = calcTotals(draft.items, draft.discountPct);
+  const insights = matchedInsights(analysis, totals);
+
+  return NextResponse.json({
+    analysis,
+    draft,
+    totals,
+    insights,
+    aiNote: analysis.note,
+  });
 }

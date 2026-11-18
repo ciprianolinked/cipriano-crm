@@ -130,20 +130,20 @@
 }
 
 .cip-body {
-  padding: 28px 44px 34px;
+  padding: 34px 44px 34px;
   flex: 1;
 }
 
 .cip-sec {
-  margin-bottom: 26px;
+  margin-bottom: 34px;
   break-inside: avoid;
 }
 
 .cip-sec-head {
   display: flex;
   align-items: center;
-  gap: 11px;
-  margin-bottom: 10px;
+  gap: 9px;
+  margin-bottom: 14px;
 }
 
 .cip-sec-num {
@@ -174,18 +174,16 @@
 }
 
 .cip-p {
-  margin: 0 0 8px;
+  margin: 0 0 9px;
   color: #33465e;
   text-align: justify;
-  line-height: 1.68;
 }
 
 .cip-b {
   display: flex;
-  gap: 8px;
-  margin: 0 0 5px;
+  gap: 6px;
+  margin: 0 0 6px;
   color: #33465e;
-  line-height: 1.62;
 }
 
 .cip-b-marker {
@@ -202,12 +200,12 @@
 .cip-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 9.8px;
+  font-size: 9.6px;
 }
 
 .cip-table th {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 7.4px;
+  font-size: 7.2px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #7d93ad;
@@ -218,7 +216,7 @@
 }
 
 .cip-table td {
-  padding: 7px 8px;
+  padding: 8px 8px;
   border-bottom: 1px solid #e8eff7;
   vertical-align: top;
   color: #33465e;
@@ -259,13 +257,13 @@
   background: #eef4fa;
   padding: 4px 6px;
   border-left: 2px solid #00e5ff;
-  margin: 10px 0 3px;
+  margin: 0 0 8px;
 }
 
 .cip-totals {
   background: #0a192f;
   color: #c6d2e0;
-  padding: 15px 18px;
+  padding: 20px 24px;
   border-radius: 3px;
   display: grid;
   grid-template-columns: 1.1fr 1fr;
@@ -304,8 +302,8 @@
 .cip-mini-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 18px;
-  margin-top: 8px;
+  gap: 12px 24px;
+  margin-top: 18px;
 }
 
 .cip-mini {
@@ -313,7 +311,7 @@
   justify-content: space-between;
   gap: 10px;
   border-bottom: 1px dotted #dce4ee;
-  padding-bottom: 3px;
+  padding-bottom: 5px;
   font-size: 9.6px;
 }
 
@@ -336,15 +334,16 @@
   border: 1px solid #dce4ee;
   border-left: 3px solid #00e5ff;
   background: #f9fbfd;
-  padding: 10px 12px;
-  margin-bottom: 8px;
+  padding: 14px 16px;
+  margin-top: 10px;
+  margin-bottom: 12px;
 }
 
 .cip-term-row {
   display: grid;
   grid-template-columns: 130px 1fr;
-  gap: 8px;
-  padding: 3px 0;
+  gap: 10px;
+  padding: 6px 0;
   font-size: 9.8px;
   border-bottom: 1px dotted #e4eaf2;
 }
@@ -366,8 +365,8 @@
 .cip-sign {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 30px;
-  margin-top: 20px;
+  gap: 36px;
+  margin-top: 46px;
 }
 
 .cip-sign-line {
@@ -406,7 +405,7 @@
 }
 
 .cip-seal {
-  margin-top: 6px;
+  margin-top: 14px;
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
@@ -434,5 +433,147 @@
   }
   .cip-head {
     padding-top: 22px;
+  }
+}
+
+/* Espaçamento extra entre tabelas, grupos e blocos */
+.cip-group-wrap {
+  margin-top: 18px;
+}
+
+.cip-table-gap {
+  margin-top: 14px;
+}
+
+.cip-item-auto {
+  color: #00879b;
+}
+
+/* ---------- Modo de edição direta no documento ---------- */
+.cip-ed {
+  border-radius: 2px;
+  outline: 1px dashed transparent;
+  outline-offset: 2px;
+  cursor: text;
+  transition: background 0.12s ease, outline-color 0.12s ease;
+}
+
+.cip-ed:hover {
+  outline-color: rgba(0, 168, 189, 0.55);
+  background: rgba(0, 229, 255, 0.09);
+}
+
+.cip-ed:focus {
+  outline: 1.5px solid #00a8bd;
+  background: rgba(0, 229, 255, 0.14);
+}
+
+.cip-ed:empty::before {
+  content: attr(data-placeholder);
+  color: #9fb2c7;
+  font-style: italic;
+}
+
+.cip-head .cip-ed:hover,
+.cip-head .cip-ed:focus {
+  background: rgba(0, 229, 255, 0.16);
+}
+
+.cip-foot .cip-ed:hover,
+.cip-foot .cip-ed:focus {
+  background: rgba(0, 229, 255, 0.12);
+}
+
+.cip-edit-block {
+  border-radius: 3px;
+  outline: 1px dashed transparent;
+  outline-offset: 4px;
+  cursor: text;
+}
+
+.cip-edit-block:hover {
+  outline-color: rgba(0, 168, 189, 0.55);
+  background: rgba(0, 229, 255, 0.05);
+}
+
+.cip-empty {
+  color: #9fb2c7;
+  font-style: italic;
+}
+
+.cip-textarea {
+  display: block;
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.6;
+  color: #0a192f;
+  background: #f2fbfd;
+  border: 1.5px solid #00a8bd;
+  border-radius: 3px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.cip-hint {
+  margin: 4px 0 8px;
+  font-size: 8.8px;
+  color: #7d93ad;
+}
+
+.cip-x .cip-del,
+.cip-del {
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  border-radius: 50%;
+  border: 1px solid #f0c3cb;
+  color: #d23b57;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.cip-del:hover {
+  background: #d23b57;
+  color: #fff;
+}
+
+.cip-add-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.cip-add {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8.4px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #00879b;
+  background: #f2fbfd;
+  border: 1px dashed #8fd6e2;
+  border-radius: 3px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+
+.cip-add:hover {
+  background: #e0f7fb;
+}
+
+@media print {
+  .cip-x,
+  .cip-add,
+  .cip-add-row,
+  .cip-del {
+    display: none !important;
+  }
+  .cip-ed,
+  .cip-edit-block {
+    outline: none !important;
+    background: none !important;
   }
 }

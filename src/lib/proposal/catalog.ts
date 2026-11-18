@@ -15,7 +15,7 @@ export const defaultBriefing: Briefing = {
   cameras: 8,
   doors: 2,
   fenceMeters: 60,
-  monitoring: true,
+  monitoring: false,
   alarm: false,
   intercom: false,
   network: true,

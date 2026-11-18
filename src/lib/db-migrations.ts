@@ -89,10 +89,6 @@ const MIGRATIONS: string[] = [
     note text,
     created_at timestamptz DEFAULT now() NOT NULL
   )`,
-  `ALTER TABLE reference_files ADD COLUMN IF NOT EXISTS manual_text text`,
-  `ALTER TABLE reference_files ADD COLUMN IF NOT EXISTS layout_rows jsonb`,
-  `ALTER TABLE maintenance_contracts ADD COLUMN IF NOT EXISTS contract_kind text DEFAULT 'manutencao' NOT NULL`,
-  `ALTER TABLE maintenance_contracts ADD COLUMN IF NOT EXISTS contract_value_cents integer DEFAULT 0 NOT NULL`,
 ];
 
 /**

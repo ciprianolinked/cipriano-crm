@@ -26,7 +26,7 @@ export type GeneratorSettings = {
 export const defaultGeneratorSettings: GeneratorSettings = {
   defaultValidityDays: 15,
   defaultPaymentTerms:
-    "40% de entrada na assinatura · 60% na entrega técnica (ou 12× no cartão corporativo)",
+    "Condição de pagamento definida conforme negociação e registrada nesta proposta.",
   defaultDeliveryTime: "12 dias úteis após aceite e liberação da obra",
   defaultWarranty: "24 meses equipamentos · 12 meses mão de obra",
   companyName: brand.name,
@@ -58,80 +58,7 @@ const section = (
 
 const bullets = (list: string[]) => list.filter(Boolean).map((l) => `• ${l}`).join("\n");
 
-/**
- * Aplica o cálculo padrão da Cipriano em propostas de fornecimento e instalação:
- * 1. Miscelâneas, infraestrutura e margem de segurança (% sobre o subtotal dos equipamentos).
- * 2. Mão de obra técnica especializada (ajustada para cada proposta).
- */
-export function applyMiscAndLabor(
-  items: ProposalItem[],
-  miscPct = 10,
-  customLabor?: number,
-): ProposalItem[] {
-  const isMisc = (desc: string) => /miscel[aâ]nia|miscelanea/i.test(desc);
-  const isLabor = (desc: string) =>
-    /m[aã]o de obra técnica especializada|instala[çc][aã]o, configura[çc][aã]o e comissionamento/i.test(desc);
-
-  // Isola os itens sem duplicar miscelânea ou mão de obra anterior
-  const cleanItems = items.filter((it) => !isMisc(it.desc) && !isLabor(it.desc));
-  const equipmentItems = cleanItems.filter((it) => it.kind === "equipamento");
-  const equipSubtotal = equipmentItems.reduce((acc, it) => acc + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
-
-  const pct = Math.max(0, Math.min(100, miscPct));
-  const miscPrice = Math.round(equipSubtotal * (pct / 100) * 100) / 100;
-
-  const result: ProposalItem[] = [...cleanItems];
-
-  // Adiciona item de miscelâneas e infraestrutura se houver equipamentos
-  if (equipSubtotal > 0 || pct > 0) {
-    result.push({
-      id: uid("misc"),
-      kind: "equipamento",
-      desc: "Miscelâneas, infraestrutura e margem de segurança",
-      spec: `Eletrodutos, conectores RJ45, patch cords, caixas de passagem, abraçadeiras, parafusos, buchas, fusíveis, insumos de instalação e reserva técnica (${pct}% sobre equipamentos)`,
-      unit: "vb",
-      qty: 1,
-      price: miscPrice,
-      scope: "Rede e Infraestrutura",
-    });
-  }
-
-  // Mão de obra técnica especializada de acordo com cada proposta
-  const points = Math.max(1, equipmentItems.reduce((acc, it) => acc + (Number(it.qty) || 1), 0));
-  const laborPrice =
-    customLabor !== undefined && customLabor >= 0
-      ? customLabor
-      : Math.max(1200, points * 280);
-
-  result.push({
-    id: uid("labor"),
-    kind: "servico",
-    desc: "Mão de obra técnica especializada (instalação e comissionamento)",
-    spec: "Lançamento e conectorização de cabos, fixação e alinhamento de equipamentos, montagem de infraestrutura, configuração lógica, testes e entrega técnica",
-    unit: "vb",
-    qty: 1,
-    price: Math.round(laborPrice * 100) / 100,
-    scope: "Projeto e Serviços Técnicos",
-  });
-
-  return result;
-}
-
-export function buildItems(
-  briefing: Briefing,
-  type: ProposalType,
-  artIncluded: boolean,
-  options?: {
-    miscPct?: number;
-    laborPrice?: number;
-    customItems?: ProposalItem[];
-  },
-): ProposalItem[] {
-  // Se o usuário já selecionou produtos do catálogo diretamente no wizard, utiliza-os como base
-  if (options?.customItems && options.customItems.length > 0) {
-    return applyMiscAndLabor(options.customItems, options.miscPct ?? 10, options.laborPrice);
-  }
-
+export function buildItems(briefing: Briefing, type: ProposalType, artIncluded: boolean): ProposalItem[] {
   const items: ProposalItem[] = [];
   const points = Math.max(
     1,
@@ -248,18 +175,6 @@ export function buildItems(
         ),
       );
     }
-    if (briefing.monitoring) {
-      items.push(
-        item(
-          "servico",
-          "Monitoramento NOC 24 h",
-          "Verificação de imagem, ronda virtual e SLA de atendimento em 4 h",
-          "mês",
-          12,
-          390,
-        ),
-      );
-    }
     if (briefing.maintenance) {
       items.push(
         item(
@@ -273,11 +188,6 @@ export function buildItems(
       );
     }
   } else {
-    if (briefing.monitoring) {
-      items.push(
-        item("servico", "Monitoramento NOC 24 h", "Ronda virtual e SLA de 4 h úteis", "mês", 12, 390),
-      );
-    }
     if (briefing.maintenance) {
       items.push(item("servico", "Manutenção preventiva mensal", "Preventiva completa do parque instalado", "mês", 12, 490));
     }
@@ -295,7 +205,7 @@ export function buildItems(
     }
   }
 
-  return applyMiscAndLabor(items, options?.miscPct ?? 10, options?.laborPrice);
+  return items;
 }
 
 function scopeList(briefing: Briefing, artIncluded: boolean): string[] {
@@ -330,9 +240,6 @@ function scopeList(briefing: Briefing, artIncluded: boolean): string[] {
   );
   if (artIncluded) {
     lines.push("Projeto executivo, ART CREA-SP e documentação as-built entregues ao final da obra.");
-  }
-  if (briefing.monitoring) {
-    lines.push("Monitoramento NOC 24 h com ronda virtual e SLA de atendimento remoto em até 4 h úteis.");
   }
   if (briefing.maintenance) {
     lines.push("Manutenção preventiva mensal inclusa no contrato de 12 meses.");
@@ -381,13 +288,11 @@ export function buildSections(input: {
     .filter(Boolean)
     .join(", ");
 
-  const objeto = `Fornecimento, instalação, configuração e comissionamento de sistema de segurança eletrônica IP para ${client}, contemplando ${systemPieces}${
-    briefing.monitoring ? ", com monitoramento 24 h pelo NOC Cipriano" : ""
-  }, treinamento operacional da equipe${artIncluded ? " e documentação técnica as-built ao final da obra" : ""}.\n\nLocal de instalação: ${location}. Segmento: ${briefing.segment.toLowerCase()}.`;
+  const objeto = `Fornecimento, instalação, configuração e comissionamento de sistema de segurança eletrônica IP para ${client}, contemplando ${systemPieces}, treinamento operacional da equipe${artIncluded ? " e documentação técnica as-built ao final da obra" : ""}.\n\nLocal de instalação: ${location}. Segmento: ${briefing.segment.toLowerCase()}.`;
 
-  const empresa = `${brand.name} projeta, instala e mantém sistemas de segurança eletrônica IP desde 2014. São 480 instalações entregues, 1.240 câmeras em campo e uptime de 99,98% no NOC próprio.\n\nA empresa atua com engenharia e equipe técnica próprias, documentação completa — do projeto executivo ao as-built — e atendimento a condomínios, indústrias, varejo, clínicas e residências de alto padrão na Grande São Paulo. Registro técnico: ${defaultGeneratorSettings.crea} · CNPJ ${defaultGeneratorSettings.cnpj}.\n\nTrabalhamos com números antes de adjetivos: cada equipamento é especificado, não vendido como “alta qualidade”.`;
+  const empresa = `${brand.name} projeta, instala e mantém sistemas de segurança eletrônica IP. A empresa atua com engenharia e equipe técnica próprias, documentação completa — do projeto executivo ao as-built — e atendimento a condomínios, indústrias, varejo, clínicas e residências na região de atuação. Registro técnico: ${defaultGeneratorSettings.crea} · CNPJ ${defaultGeneratorSettings.cnpj}.\n\nCada equipamento é especificado individualmente; o escopo, os testes e as responsabilidades constam nos blocos seguintes.`;
 
-  const objetivo = `Reduzir pontos cegos e dar previsibilidade à operação de segurança de ${client}, permitindo identificar e reagir a um evento em menos de 8 segundos, manter registro de imagens por 30 dias e controlar quem entra — e quando entra — em cada acesso.\n\nO sistema deve operar 24 h por dia, com verificação remota do NOC e alerta imediato ao responsável técnico do cliente.${
+  const objetivo = `Reduzir pontos cegos e dar previsibilidade à operação de segurança de ${client}, permitindo identificar eventos, manter registro de imagens pelo período definido no escopo e controlar quem entra — e quando entra — em cada acesso.\n\nAs notificações e o acesso às imagens são configurados nos equipamentos e aplicativos previstos na proposta; a operação diária fica sob responsabilidade do cliente.${
     briefing.priority === "orcamento"
       ? "\n\nDado o foco em orçamento, a proposta prioriza o perímetro crítico e organiza o restante em fases, preservando a possibilidade de expansão sem substituição de equipamentos."
       : briefing.priority === "prazo"
@@ -451,7 +356,7 @@ export function buildSections(input: {
     "Interrupções no fornecimento de energia, danos por terceiros, vandalismo e descargas atmosféricas não são de responsabilidade da Cipriano.",
     "Os prazos são contados em dias úteis e começam no aceite formal e na liberação de obra (e não na emissão desta proposta).",
     "Alterações de escopo somente são executadas após orçamento complementar aprovado por escrito; nenhuma mudança é feita por acordo verbal.",
-    "Reajuste anual pelo IPCA para contratos de monitoramento e manutenção após 12 meses.",
+    "Reajuste anual pelo índice acordado, quando houver contrato de manutenção com vigência recorrente.",
     "O tratamento de imagens e dados de acesso deve observar a política de uso do cliente e a LGPD; a Cipriano atua como operadora técnica.",
   ]);
 
@@ -482,7 +387,7 @@ export function buildSections(input: {
       ])}\n\nA documentação é entregue em PDF, organizada por disciplina, e também fica disponível no painel Cipriano do cliente.`
     : `A emissão de ART, o projeto executivo detalhado e a documentação as-built não estão inclusos nesta proposta.\n\nPara obras de maior valor, condomínios e exigências de síndico ou seguradora, recomendamos incluir esse pacote: ele documenta a responsabilidade técnica, garante rastreabilidade e reduz questionamentos futuros. Pode ser acrescido por aditivo, com valor informado à parte.`;
 
-  const valor = `O investimento total desta proposta é apresentado abaixo, com desconto comercial já aplicado. Valores em reais (BRL), com impostos inclusos, válidos pela data de emissão.\n\nO resumo de itens, quantidades e preços unitários está detalhado no bloco de produtos e serviços. O parcelamento sugerido é de 12× sem juros no cartão corporativo ou conforme condição de pagamento acordada.`;
+  const valor = `O investimento total desta proposta é apresentado abaixo, com desconto comercial já aplicado. Valores em reais (BRL), válidos na data de emissão.\n\nO resumo de itens, quantidades e preços unitários está detalhado no bloco de produtos e serviços. A quantidade e os valores das parcelas são calculados no resumo e podem ser ajustados para refletir a condição de pagamento acordada entre as partes.`;
 
   const condicoes = bullets([
     `Pagamento: ${defaultGeneratorSettings.defaultPaymentTerms}.`,
@@ -499,7 +404,7 @@ export function buildSections(input: {
     `Mobilização em até 3 dias úteis após a entrada e a aprovação do projeto executivo.`,
     "Cronograma típico: semana 1 infraestrutura · semana 2 instalação e configuração · semana 3 comissionamento, treinamento e entrega.",
     "Atrasos por falta de energia, acesso, obra civil ou aprovação do cliente deslocam o cronograma na mesma proporção, com registro por e-mail.",
-    "Monitoramento e manutenção iniciam após o termo de comissionamento.",
+    "Serviços de manutenção previstos na proposta iniciam após o termo de comissionamento.",
   ])}\n\n${deliveryTime}`;
 
   const garantia = `${bullets([
@@ -507,7 +412,7 @@ export function buildSections(input: {
     "Cobertura de equipamentos conforme fabricante, com intermediação da Cipriano no acionamento da garantia.",
     "Garantia de mão de obra cobre instalação, configuração, passagem de cabos, fixes e comissionamento.",
     "Não cobertos: vandalismo, furto, descargas atmosféricas, intervenção de terceiros, sobrecarga elétrica e falta de manutenção preventiva contratada.",
-    "Atendimento remoto em até 4 h úteis e visita técnica em até 24 h úteis na Grande São Paulo.",
+    "Chamados de garantia são avaliados e agendados conforme as condições comerciais e a disponibilidade técnica acordada.",
     "Peças fora de garantia são orçadas previamente e só substituídas após aprovação.",
   ])}`;
 
@@ -641,24 +546,17 @@ export function generateProposal(input: {
   validityDays?: number;
   discountPct?: number;
   artIncluded?: boolean;
-  miscPct?: number;
-  laborPrice?: number;
-  customItems?: ProposalItem[];
   settings?: Partial<GeneratorSettings>;
 }): ProposalDraft {
   const settings = { ...defaultGeneratorSettings, ...input.settings };
   if (input.briefing.purpose === "manutencao_mensal") return generateMaintenanceProposal({ ...input, settings });
-  const briefing = input.briefing;
+  const briefing: Briefing = { ...input.briefing, monitoring: false };
   const artIncluded = input.artIncluded ?? input.type === "completa";
   const validityDays = input.validityDays ?? settings.defaultValidityDays;
   const discountPct = input.discountPct ?? suggestDiscount(briefing, input.type);
   const deliveryTime = settings.defaultDeliveryTime;
   const warranty = settings.defaultWarranty;
-  const items = buildItems(briefing, input.type, artIncluded, {
-    miscPct: input.miscPct,
-    laborPrice: input.laborPrice,
-    customItems: input.customItems,
-  });
+  const items = buildItems(briefing, input.type, artIncluded);
   const sections = buildSections({
     type: input.type,
     briefing,

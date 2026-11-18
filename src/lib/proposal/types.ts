@@ -4,6 +4,9 @@ export type ProposalStage = "novo" | "enviada" | "negociacao" | "ganho" | "perdi
 
 export type ItemKind = "equipamento" | "servico";
 
+/** Adicionais fixos de todo projeto: miscelâneas, infraestrutura, margem de segurança e mão de obra. */
+export type AutoItemKey = "misc" | "infra" | "safety" | "labor";
+
 export type ProposalItem = {
   id: string;
   kind: ItemKind;
@@ -14,6 +17,10 @@ export type ProposalItem = {
   price: number;
   /** Disciplina/escopo do item (CFTV IP, Controle de Acesso...). */
   scope?: string;
+  /** Item calculado automaticamente pelos adicionais do projeto (ver extras.ts). */
+  auto?: AutoItemKey;
+  /** Percentual aplicado sobre o valor dos equipamentos (miscelâneas, infraestrutura, margem). */
+  pct?: number;
 };
 
 export type SectionKind = "text" | "table" | "items" | "totals" | "terms";
@@ -52,6 +59,8 @@ export type Briefing = {
   purpose?: "projeto" | "manutencao_mensal";
   maintenancePlan?: MaintenancePlan;
   wantsContract?: boolean;
+  /** Número de parcelas exibido no resumo; pode ser personalizado por proposta. */
+  paymentInstallments?: number;
   segment: string;
   cameras: number;
   doors: number;
@@ -63,6 +72,12 @@ export type Briefing = {
   maintenance: boolean;
   notes: string;
   priority: "prazo" | "orcamento" | "tecnica" | "seguranca";
+};
+
+export type DeliveryTermSection = {
+  id: string;
+  title: string;
+  body: string;
 };
 
 export type ProposalDraft = {

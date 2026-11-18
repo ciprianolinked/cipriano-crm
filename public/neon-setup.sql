@@ -88,7 +88,6 @@ CREATE TABLE IF NOT EXISTS public.catalog_items (
   created_at timestamptz DEFAULT now() NOT NULL
 );
 
--- Histórico de revisão de preços do fornecedor (justificativa de reajustes).
 CREATE TABLE IF NOT EXISTS public.catalog_price_revisions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   item_id uuid NOT NULL,
@@ -151,6 +150,30 @@ CREATE TABLE IF NOT EXISTS public.maintenance_document_revisions (
   note text DEFAULT '' NOT NULL,
   created_at timestamptz DEFAULT now() NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS public.delivery_terms (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  number text NOT NULL,
+  proposal_id uuid,
+  proposal_number text NOT NULL,
+  proposal_revision integer DEFAULT 1 NOT NULL,
+  client_id uuid,
+  client_name text NOT NULL,
+  contact text,
+  client_email text,
+  site text,
+  title text DEFAULT 'Termo de entrega e aceite' NOT NULL,
+  delivery_date text NOT NULL,
+  status text DEFAULT 'rascunho' NOT NULL,
+  items jsonb DEFAULT '[]'::jsonb NOT NULL,
+  sections jsonb DEFAULT '[]'::jsonb NOT NULL,
+  generated_by_ai boolean DEFAULT false NOT NULL,
+  created_at timestamptz DEFAULT now() NOT NULL,
+  updated_at timestamptz DEFAULT now() NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS delivery_terms_number_unique ON public.delivery_terms (number);
+CREATE INDEX IF NOT EXISTS delivery_terms_proposal_idx ON public.delivery_terms (proposal_id);
+CREATE INDEX IF NOT EXISTS delivery_terms_created_idx ON public.delivery_terms (created_at);
 
 CREATE TABLE IF NOT EXISTS public.ipca_history (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -260,13 +283,13 @@ ON CONFLICT (id) DO NOTHING;
 
 COMMIT;
 
--- Confirmação: o resultado deve ser 12 no database selecionado.
+-- Confirmação: o resultado deve ser 13 no database selecionado.
 SELECT count(*) AS tabelas_do_aplicativo, current_database() AS database_atual
 FROM pg_tables
 WHERE schemaname = 'public'
   AND tablename IN (
     'clients', 'proposals', 'activities', 'catalog_items',
-    'catalog_price_revisions', 'maintenance_contracts',
-    'maintenance_readjusts', 'maintenance_document_revisions',
-    'ipca_history', 'economic_index_values', 'reference_files', 'app_settings'
+    'catalog_price_revisions', 'maintenance_contracts', 'maintenance_readjusts',
+    'maintenance_document_revisions', 'delivery_terms', 'ipca_history',
+    'economic_index_values', 'reference_files', 'app_settings'
   );

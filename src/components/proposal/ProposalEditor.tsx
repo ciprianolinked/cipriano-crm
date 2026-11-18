@@ -5,10 +5,13 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { brl, fmtDate, fmtDateTime } from "@/lib/brand";
 import { calcTotals } from "@/lib/proposal/catalog";
-import { STAGES, type ProposalItem, type ProposalSection } from "@/lib/proposal/types";
-import { applyMiscAndLabor, SECTION_LIBRARY } from "@/lib/proposal/generate";
-import type { ProposalType, SectionTableRow } from "@/lib/proposal/types";
-import { ProposalDocument, type DocData, type DocSettings } from "@/components/proposal/ProposalDocument";
+import { STAGES, type ItemKind, type ProposalItem, type ProposalSection } from "@/lib/proposal/types";
+import { SECTION_LIBRARY } from "@/lib/proposal/generate";
+import { ProposalDocument, type DocData, type DocEdit, type DocSettings } from "@/components/proposal/ProposalDocument";
+import { ExtrasFields } from "@/components/proposal/ExtrasFields";
+import { DEFAULT_EXTRAS, applyExtras, readExtras, type ProposalExtras } from "@/lib/proposal/extras";
+import { readDocTexts } from "@/lib/proposal/doc-text";
+import { getPaymentInstallments, installmentAmount } from "@/lib/proposal/payment";
 import { PrintActions } from "@/components/proposal/PrintActions";
 import { ProposalDeleteButton } from "@/components/proposal/ProposalDeleteButton";
 import { isMaintenanceProposal, maintenanceSummary } from "@/lib/proposal/maintenance-plan";
@@ -55,7 +58,7 @@ export type EditorProposal = DocData & {
 };
 
 const uid = () => `x-${Math.random().toString(36).slice(2, 9)}`;
-const toDateInput = (value: string | null) => (value ? new Date(value).toISOString().slice(0, 10) : "");
+const toDateInput = (value: string | Date | null) => (value ? new Date(value).toISOString().slice(0, 10) : "");
 
 export function ProposalEditor({
   initial,
@@ -84,97 +87,130 @@ export function ProposalEditor({
   const [catalogPick, setCatalogPick] = useState("");
   const [revisions, setRevisions] = useState<EditorRevision[]>(initialRevisions);
   const [revisionBusy, setRevisionBusy] = useState(false);
-  const [editorMiscPct, setEditorMiscPct] = useState(10);
-  const [editorLaborPrice, setEditorLaborPrice] = useState<number | "">("");
+  const [editMode, setEditMode] = useState(true);
 
   const totals = useMemo(() => calcTotals(proposal.items, proposal.discountPct), [proposal.items, proposal.discountPct]);
   const maintenanceProposal = isMaintenanceProposal(proposal.briefing);
   const monthly = maintenanceSummary(proposal.items, proposal.discountPct, proposal.briefing);
+  const paymentInstallments = getPaymentInstallments(proposal.briefing);
 
-  const equipSubtotal = useMemo(() => {
-    return proposal.items
-      .filter((it) => it.kind === "equipamento" && !/miscel[aâ]nia|miscelanea/i.test(it.desc))
-      .reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
-  }, [proposal.items]);
-
-  const miscEstimated = Math.round(equipSubtotal * (editorMiscPct / 100) * 100) / 100;
-
-  function handleApplyMiscAndLabor() {
-    const updated = applyMiscAndLabor(
-      proposal.items,
-      editorMiscPct,
-      typeof editorLaborPrice === "number" && editorLaborPrice >= 0 ? editorLaborPrice : undefined,
-    );
-    update({ items: updated });
-  }
-
-  function patchSectionRow(sectionId: string, rowIndex: number, patch: Partial<SectionTableRow>) {
-    const section = proposal.sections.find((s) => s.id === sectionId);
-    if (!section || !section.rows) return;
-    const nextRows = section.rows.map((r, i) => (i === rowIndex ? { ...r, ...patch } : r));
-    patchSection(sectionId, { rows: nextRows });
-  }
-
-  function addSectionRow(sectionId: string) {
-    const section = proposal.sections.find((s) => s.id === sectionId);
-    if (!section) return;
-    const currentRows = section.rows ?? [];
-    patchSection(sectionId, {
-      rows: [...currentRows, { label: "Nova frente", cipriano: "Escopo Cipriano", client: "Responsabilidade cliente" }],
-    });
-  }
-
-  function removeSectionRow(sectionId: string, rowIndex: number) {
-    const section = proposal.sections.find((s) => s.id === sectionId);
-    if (!section || !section.rows) return;
-    patchSection(sectionId, { rows: section.rows.filter((_, i) => i !== rowIndex) });
-  }
-
-  function update(patch: Partial<EditorProposal>) {
-    setProposal((prev) => ({ ...prev, ...patch }));
+  function mutate(fn: (prev: EditorProposal) => EditorProposal) {
+    setProposal(fn);
     setDirty(true);
   }
 
+  function update(patch: Partial<EditorProposal>) {
+    mutate((prev) => ({ ...prev, ...patch }));
+  }
+
+  /** Recalcula miscelâneas, infraestrutura, margem de segurança e mão de obra a partir dos equipamentos atuais. */
+  function recompute(prev: EditorProposal, change: { items?: ProposalItem[]; extras?: Partial<ProposalExtras> }): EditorProposal {
+    let items = change.items ?? prev.items;
+    let briefing = prev.briefing;
+    if (!isMaintenanceProposal(prev.briefing)) {
+      const current = readExtras(prev.briefing);
+      if (change.extras || current) {
+        const merged: ProposalExtras = { ...(current ?? { ...DEFAULT_EXTRAS, enabled: false }), ...(change.extras ?? {}) };
+        briefing = { ...(prev.briefing ?? {}), extras: merged };
+        items = applyExtras(items, merged);
+      }
+    }
+    return { ...prev, items, briefing };
+  }
+
+  function changeItems(fn: (items: ProposalItem[]) => ProposalItem[]) {
+    mutate((prev) => recompute(prev, { items: fn(prev.items) }));
+  }
+
+  function changeExtras(patch: Partial<ProposalExtras>) {
+    mutate((prev) => recompute(prev, { extras: patch }));
+  }
+
   function patchSection(id: string, patch: Partial<ProposalSection>) {
-    update({ sections: proposal.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
+    mutate((prev) => ({ ...prev, sections: prev.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
   }
 
   function moveSection(id: string, dir: -1 | 1) {
-    const index = proposal.sections.findIndex((s) => s.id === id);
-    const target = index + dir;
-    if (index < 0 || target < 0 || target >= proposal.sections.length) return;
-    const next = [...proposal.sections];
-    [next[index], next[target]] = [next[target], next[index]];
-    update({ sections: next });
+    mutate((prev) => {
+      const index = prev.sections.findIndex((s) => s.id === id);
+      const target = index + dir;
+      if (index < 0 || target < 0 || target >= prev.sections.length) return prev;
+      const next = [...prev.sections];
+      [next[index], next[target]] = [next[target], next[index]];
+      return { ...prev, sections: next };
+    });
   }
 
   function patchItem(id: string, patch: Partial<ProposalItem>) {
-    update({ items: proposal.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) });
+    changeItems((items) => items.map((i) => (i.id === id ? { ...i, ...patch } : i)));
   }
 
   function removeItem(id: string) {
-    update({ items: proposal.items.filter((i) => i.id !== id) });
+    changeItems((items) => items.filter((i) => i.id !== id));
+  }
+
+  /** Remover uma linha automática significa zerar o percentual (ou o valor) que a gera. */
+  function removeFromDocument(item: ProposalItem) {
+    if (!item.auto) return removeItem(item.id);
+    const patch: Partial<ProposalExtras> =
+      item.auto === "misc" ? { miscPct: 0 } : item.auto === "infra" ? { infraPct: 0 } : item.auto === "safety" ? { safetyPct: 0 } : { laborValue: 0 };
+    changeExtras(patch);
+  }
+
+  function addItem(kind: ItemKind) {
+    changeItems((items) => [
+      ...items,
+      { id: uid(), kind, desc: kind === "servico" ? "Novo serviço" : "Novo item", spec: "", unit: "un", qty: 1, price: 0 },
+    ]);
+  }
+
+  function renameScope(from: string, to: string) {
+    changeItems((items) => items.map((i) => (!i.auto && (i.scope?.trim() || "Itens Complementares") === from ? { ...i, scope: to } : i)));
+  }
+
+  function setDocText(key: string, value: string) {
+    mutate((prev) => ({ ...prev, briefing: { ...(prev.briefing ?? {}), docText: { ...readDocTexts(prev.briefing), [key]: value } } }));
   }
 
   function addFromCatalog(id: string) {
     const item = catalog.find((c) => c.id === id);
     if (!item) return;
-    update({
-      items: [
-        ...proposal.items,
-        {
-          id: uid(),
-          kind: item.kind === "servico" ? "servico" : "equipamento",
-          desc: item.description,
-          spec: item.spec ?? "",
-          unit: item.unit,
-          qty: 1,
-          price: item.priceCents / 100,
-        },
-      ],
-    });
+    changeItems((items) => [
+      ...items,
+      {
+        id: uid(),
+        kind: item.kind === "servico" ? "servico" : "equipamento",
+        desc: item.description,
+        spec: item.spec ?? "",
+        unit: item.unit,
+        qty: 1,
+        price: item.priceCents / 100,
+      },
+    ]);
     setCatalogPick("");
   }
+
+  const docEdit: DocEdit = {
+    text: setDocText,
+    field: (patch) => {
+      const { paymentInstallments: count, ...fields } = patch;
+      if (count !== undefined) {
+        update({
+          ...fields,
+          briefing: { ...(proposal.briefing ?? {}), paymentInstallments: Math.min(60, Math.max(1, Math.round(count))) },
+        });
+      } else {
+        update(fields);
+      }
+    },
+    section: patchSection,
+    item: patchItem,
+    removeItem: removeFromDocument,
+    addItem,
+    renameScope,
+    extras: changeExtras,
+  };
+  const extrasValue: ProposalExtras = readExtras(proposal.briefing) ?? { ...DEFAULT_EXTRAS, enabled: false };
 
   async function save(extra?: Partial<EditorProposal>) {
     setSaving(true);
@@ -196,6 +232,7 @@ export function ProposalEditor({
       archived: proposal.archived,
       lossReason: proposal.lossReason,
       type: proposal.type,
+      issuedAt: proposal.issuedAt,
       ...extra,
     };
     try {
@@ -337,7 +374,7 @@ export function ProposalEditor({
               <div className="flex items-center gap-2">
                 <span className="font-mono text-[10px] tracking-[0.18em] text-signal">{proposal.number}</span>
                 {proposal.revision && proposal.revision > 1 ? (
-                  <span className="chip text-signal">R${proposal.revision}</span>
+                  <span className="chip text-signal">R{proposal.revision}</span>
                 ) : null}
                 <span className="chip">{proposal.type.replace("_", " & ")}</span>
                 {proposal.archived ? <span className="chip text-amber">arquivada</span> : null}
@@ -349,6 +386,11 @@ export function ProposalEditor({
             <span className={`hidden text-[11px] sm:block ${dirty ? "text-amber" : "text-steel"}`}>
               {dirty ? "Alterações não salvas" : savedAt ? `Salvo ${savedAt}` : "Tudo salvo"}
             </span>
+            {proposal.status === "ganho" ? (
+              <Link href={`/termos-entrega/novo?proposta=${proposal.id}`} className="btn !border-armed/40 !text-armed">
+                Elaborar termo de entrega
+              </Link>
+            ) : null}
             <Link
               href={`/contratos/novo?proposta=${proposal.id}`}
               className="btn !border-signal/35 !text-signal"
@@ -400,9 +442,26 @@ export function ProposalEditor({
       </header>
 
       <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:p-6">
-        <div className="print-area scroll-thin overflow-x-auto rounded-xl border border-line/50 bg-[#0b1728] p-4">
-          <div className="mx-auto w-[794px]">
-            <ProposalDocument proposal={proposal} settings={settings} />
+        <div className="min-w-0 space-y-3">
+          <div className="no-print flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line/60 bg-navy/30 px-3 py-2">
+            <div className="min-w-0">
+              <div className="text-[12px] font-medium text-silver">
+                {editMode ? "Edição direta ligada" : "Edição direta desligada"}
+              </div>
+              <div className="text-[10.5px] leading-relaxed text-steel">
+                {editMode
+                  ? "Clique em qualquer texto, rótulo, valor, tabela, assinatura ou rodapé do documento para alterar. Enter confirma, Esc cancela."
+                  : "Visualização limpa, como no PDF. Ligue a edição para alterar o documento."}
+              </div>
+            </div>
+            <button type="button" className={`btn ${editMode ? "!border-signal/50 !text-signal" : ""}`} onClick={() => setEditMode((v) => !v)}>
+              {editMode ? "Desligar edição" : "Editar no documento"}
+            </button>
+          </div>
+          <div className="print-area scroll-thin overflow-x-auto rounded-xl border border-line/50 bg-[#0b1728] p-4">
+            <div className="mx-auto w-[794px]">
+              <ProposalDocument proposal={proposal} settings={settings} edit={editMode ? docEdit : undefined} />
+            </div>
           </div>
         </div>
 
@@ -472,7 +531,7 @@ export function ProposalEditor({
                     />
                   </Field>
                   <Field label="Emissão">
-                    <input className="field" value={fmtDate(proposal.issuedAt)} readOnly />
+                    <input type="date" className="field" value={toDateInput(proposal.issuedAt)} onChange={(e) => { if (e.target.value) update({ issuedAt: new Date(`${e.target.value}T12:00:00`).toISOString() }); }} />
                   </Field>
                 </div>
               </Panel>
@@ -485,6 +544,24 @@ export function ProposalEditor({
                     onChange={(e) => update({ paymentTerms: e.target.value })}
                   />
                 </Field>
+                {!maintenanceProposal ? (
+                  <Field label="Número de parcelas no resumo">
+                    <input
+                      type="number"
+                      min={1}
+                      max={60}
+                      className="field"
+                      value={paymentInstallments}
+                      onChange={(e) => {
+                        const count = Math.max(1, Math.min(60, Math.round(Number(e.target.value) || 1)));
+                        update({ briefing: { ...(proposal.briefing ?? {}), paymentInstallments: count } });
+                      }}
+                    />
+                    <span className="mt-1 block text-[10px] text-steel">
+                      O valor do resumo e do PDF é recalculado pelo total atual ÷ {paymentInstallments}.
+                    </span>
+                  </Field>
+                ) : null}
                 <Field label="Prazo de entrega">
                   <input className="field" value={proposal.deliveryTime ?? ""} onChange={(e) => update({ deliveryTime: e.target.value })} />
                 </Field>
@@ -586,157 +663,7 @@ export function ProposalEditor({
                     ))}
                   </div>
                 </div>
-                <button
-                  className="btn mt-2 w-full"
-                  onClick={() =>
-                    update({
-                      sections: [
-                        ...proposal.sections,
-                        { id: uid(), title: "Novo bloco", body: "Descreva o conteúdo deste bloco.", enabled: true, kind: "text" },
-                      ],
-                    })
-                  }
-                >
-                  + Adicionar bloco em branco
-                </button>
-              </Panel>
-
-              {revisions.length > 0 ? (
-                <Panel title="Histórico de revisões" hint="Todas as versões desta proposta">
-                  <div className="space-y-2">
-                    {revisions.map((rev) => (
-                      <div
-                        key={rev.id}
-                        className={`rounded-lg border p-2 ${
-                          rev.id === proposal.id ? "border-signal/50 bg-signal/10" : "border-line/60 bg-abyss2/50"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <Link
-                            href={`/propostas/${rev.id}`}
-                            className="truncate font-medium text-[11.5px] text-white hover:text-signal"
-                          >
-                            {rev.number} · Revisão {rev.revision}
-                          </Link>
-                          <span className="chip">{rev.status}</span>
-                        </div>
-                        <div className="mt-1 flex items-center gap-2">
-                          <span className="font-mono text-[10px] text-signal">{brl(rev.totalCents / 100)}</span>
-                          <span className="font-mono text-[10px] text-steel">{fmtDate(rev.issuedAt)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Panel>
-              ) : null}
-            </div>
-          ) : null}
-
-          {tab === "itens" ? (
-            <div className="space-y-3">
-              <Panel title={maintenanceProposal ? "Mensalidade e vigência" : "Investimento"} hint="Calculado em tempo real">
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <Stat label="Subtotal" value={brl(totals.subtotalCents / 100)} />
-                  <Stat label="Desconto" value={`${proposal.discountPct}%`} />
-                  <Stat label="Total" value={brl(totals.totalCents / 100)} accent />
-                </div>
-                <Field label="Desconto comercial (%)">
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    className="field"
-                    value={proposal.discountPct}
-                    onChange={(e) => update({ discountPct: Number(e.target.value) })}
-                  />
-                </Field>
-                <div className="text-[11px] text-steel">{maintenanceProposal ? `${brl(monthly.monthlyCents / 100)}/mês · ${monthly.months} meses · total ${brl(totals.totalCents / 100)}` : `12× de ${brl(totals.installmentCents / 100)}`}</div>
-              </Panel>
-
-              <Panel title="Itens da proposta" hint="Equipamentos e serviços">
-                <div className="flex gap-1.5">
-                  <select className="field" value={catalogPick} onChange={(e) => setCatalogPick(e.target.value)}>
-                    <option value="">Adicionar do catálogo…</option>
-                    {catalog.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.category} · {c.description}
-                      </option>
-                    ))}
-                  </select>
-                  <button className="btn px-3" onClick={() => addFromCatalog(catalogPick)} disabled={!catalogPick}>
-                    +
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {proposal.items.map((item) => (
-                    <div key={item.id} className="rounded-lg border border-line/60 bg-abyss2/50 p-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <select
-                          className="field w-auto py-1 text-[11px]"
-                          value={item.kind}
-                          onChange={(e) => patchItem(item.id, { kind: e.target.value as ProposalItem["kind"] })}
-                        >
-                          <option value="equipamento">Equipamento</option>
-                          <option value="servico">Serviço</option>
-                        </select>
-                        <button className="text-[11px] text-alarm" onClick={() => removeItem(item.id)}>
-                          remover
-                        </button>
-                      </div>
-                      <input
-                        className="field mt-1.5 text-[12px]"
-                        value={item.desc}
-                        onChange={(e) => patchItem(item.id, { desc: e.target.value })}
-                        placeholder="Descrição"
-                      />
-                      <input
-                        className="field mt-1.5 text-[11px]"
-                        value={item.spec}
-                        onChange={(e) => patchItem(item.id, { spec: e.target.value })}
-                        placeholder="Especificação técnica"
-                      />
-                      <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-                        <input
-                          className="field text-[11px]"
-                          value={item.unit}
-                          onChange={(e) => patchItem(item.id, { unit: e.target.value })}
-                          placeholder="un"
-                        />
-                        <input
-                          type="number"
-                          className="field text-[11px]"
-                          value={item.qty}
-                          onChange={(e) => patchItem(item.id, { qty: Number(e.target.value) })}
-                          placeholder="qtd"
-                        />
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="field text-[11px]"
-                          value={item.price}
-                          onChange={(e) => patchItem(item.id, { price: Number(e.target.value) })}
-                          placeholder="preço"
-                        />
-                      </div>
-                      <div className="mt-1 text-right font-mono text-[10.5px] text-signal">
-                        {brl(item.qty * item.price)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  className="btn mt-2 w-full"
-                  onClick={() =>
-                    update({
-                      items: [
-                        ...proposal.items,
-                        { id: uid(), kind: "equipamento", desc: "Novo item", spec: "", unit: "un", qty: 1, price: 0 },
-                      ],
-                    })
-                  }
-                >
+                <button className="btn mt-2 w-full" onClick={() => addItem("equipamento")}>
                   + Item personalizado
                 </button>
               </Panel>

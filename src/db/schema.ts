@@ -1,6 +1,7 @@
 import {
   boolean,
   customType,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -9,12 +10,13 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { ProposalItem, ProposalSection } from "@/lib/proposal/types";
+import type { DeliveryTermSection, ProposalItem, ProposalSection } from "@/lib/proposal/types";
 import type { ReferenceAnalysis } from "@/lib/references";
 
-/** PostgreSQL bytea — driver node-postgres already converts Buffer to/from bytea. */
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
-  dataType: () => "bytea",
+  dataType() {
+    return "bytea";
+  },
 });
 
 export const clients = pgTable("clients", {
@@ -173,6 +175,35 @@ export const economicIndexValues = pgTable(
   (t) => [uniqueIndex("economic_index_month_unique").on(t.indexName, t.month)],
 );
 
+export const deliveryTerms = pgTable(
+  "delivery_terms",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    number: text("number").notNull(),
+    proposalId: uuid("proposal_id"),
+    proposalNumber: text("proposal_number").notNull(),
+    proposalRevision: integer("proposal_revision").notNull().default(1),
+    clientId: uuid("client_id"),
+    clientName: text("client_name").notNull(),
+    contact: text("contact"),
+    clientEmail: text("client_email"),
+    site: text("site"),
+    title: text("title").notNull().default("Termo de entrega e aceite"),
+    deliveryDate: text("delivery_date").notNull(),
+    status: text("status").notNull().default("rascunho"),
+    items: jsonb("items").$type<ProposalItem[]>().notNull().default([]),
+    sections: jsonb("sections").$type<DeliveryTermSection[]>().notNull().default([]),
+    generatedByAi: boolean("generated_by_ai").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("delivery_terms_number_unique").on(t.number),
+    index("delivery_terms_proposal_idx").on(t.proposalId),
+    index("delivery_terms_created_idx").on(t.createdAt),
+  ],
+);
+
 export const maintenanceDocumentRevisions = pgTable("maintenance_document_revisions", {
   id: uuid("id").defaultRandom().primaryKey(),
   contractId: uuid("contract_id").notNull(),
@@ -209,7 +240,12 @@ export const appSettings = pgTable("app_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-/** Propostas de concorrentes enviadas como referência de equalização (máx. 6). */
+export type ClientRow = typeof clients.$inferSelect;
+export type ProposalRow = typeof proposals.$inferSelect;
+export type ActivityRow = typeof activities.$inferSelect;
+export type CatalogRow = typeof catalogItems.$inferSelect;
+export type SettingsRow = typeof appSettings.$inferSelect;
+export type MaintenanceContractRow = typeof maintenanceContracts.$inferSelect;
 export const referenceFiles = pgTable("reference_files", {
   id: uuid("id").defaultRandom().primaryKey(),
   fileName: text("file_name").notNull(),
@@ -218,19 +254,13 @@ export const referenceFiles = pgTable("reference_files", {
   data: bytea("data").notNull(),
   extractedText: text("extracted_text"),
   manualText: text("manual_text"),
-  layoutRows: jsonb("layout_rows").$type<string[][]>(),
-  analysis: jsonb("analysis").$type<ReferenceAnalysis>(),
+  layoutRows: jsonb("layout_rows").$type<string[][] | null>(),
+  analysis: jsonb("analysis").$type<ReferenceAnalysis | null>(),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export type ReferenceFileRow = typeof referenceFiles.$inferSelect;
-
-export type ClientRow = typeof clients.$inferSelect;
-export type ProposalRow = typeof proposals.$inferSelect;
-export type ActivityRow = typeof activities.$inferSelect;
-export type CatalogRow = typeof catalogItems.$inferSelect;
-export type SettingsRow = typeof appSettings.$inferSelect;
-export type MaintenanceContractRow = typeof maintenanceContracts.$inferSelect;
+export type DeliveryTermRow = typeof deliveryTerms.$inferSelect;
 export type MaintenanceReadjustRow = typeof maintenanceReadjusts.$inferSelect;
 export type IpcaRowDb = typeof ipcaHistory.$inferSelect;
+export type ReferenceFileRow = typeof referenceFiles.$inferSelect;

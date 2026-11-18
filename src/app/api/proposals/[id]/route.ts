@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { activities, proposals } from "@/db/schema";
 import { deleteProposalFamily } from "@/lib/proposal/delete";
 import { calcTotals } from "@/lib/proposal/catalog";
+import { applyExtras, readExtras } from "@/lib/proposal/extras";
+import { isMaintenanceProposal } from "@/lib/proposal/maintenance-plan";
 import { isProposalType, isStage, type ProposalItem, type ProposalSection } from "@/lib/proposal/types";
 
 export const dynamic = "force-dynamic";
@@ -74,27 +76,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (typeof body.archived === "boolean") patch.archived = body.archived;
   if (typeof body.artIncluded === "boolean") patch.artIncluded = body.artIncluded;
   if (typeof body.validityDays === "number") patch.validityDays = Math.max(1, Math.round(body.validityDays));
+  if (typeof body.issuedAt === "string" && body.issuedAt) {
+    const issued = new Date(body.issuedAt.length <= 10 ? `${body.issuedAt}T12:00:00Z` : body.issuedAt);
+    if (!Number.isNaN(issued.getTime())) patch.issuedAt = issued;
+  }
   if (body.nextActionAt === null) patch.nextActionAt = null;
   else if (typeof body.nextActionAt === "string" && body.nextActionAt) patch.nextActionAt = new Date(body.nextActionAt);
   if ("clientId" in body) patch.clientId = body.clientId || null;
-  if ("number" in body && typeof body.number === "string" && body.number.trim()) {
-    patch.number = body.number.trim();
-  }
-  if ("issuedAt" in body && (typeof body.issuedAt === "string" || typeof body.issuedAt === "number" || body.issuedAt instanceof Date)) {
-    const parsed = new Date(body.issuedAt);
-    if (!Number.isNaN(parsed.getTime())) patch.issuedAt = parsed;
-  }
 
   const existing = await db.select().from(proposals).where(eq(proposals.id, id)).limit(1);
   if (existing.length === 0) return NextResponse.json({ error: "Proposta não encontrada." }, { status: 404 });
   const current = existing[0];
 
-  const items = Array.isArray(body.items) ? (body.items as ProposalItem[]) : current.items;
+  const incomingBriefing = body.briefing && typeof body.briefing === "object" ? (body.briefing as Record<string, unknown>) : null;
+  let items = Array.isArray(body.items) ? (body.items as ProposalItem[]) : current.items;
+  // Recalcula os adicionais (miscelâneas, infraestrutura, margem, mão de obra) sempre que itens ou briefing mudam.
+  if ((Array.isArray(body.items) || incomingBriefing) && !isMaintenanceProposal(incomingBriefing ?? current.briefing)) {
+    items = applyExtras(items, readExtras(incomingBriefing ?? current.briefing));
+  }
   const sections = Array.isArray(body.sections) ? (body.sections as ProposalSection[]) : current.sections;
   const discountPct =
     typeof body.discountPct === "number" ? Math.min(100, Math.max(0, Math.round(body.discountPct))) : current.discountPct;
 
-  if (Array.isArray(body.items) || typeof body.discountPct === "number") {
+  if (Array.isArray(body.items) || incomingBriefing || typeof body.discountPct === "number") {
     const totals = calcTotals(items, discountPct);
     patch.items = items;
     patch.discountPct = discountPct;
