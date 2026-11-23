@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { activities, proposals } from "@/db/schema";
+import { activities, proposals, serviceOrders } from "@/db/schema";
 import { deleteProposalFamily } from "@/lib/proposal/delete";
 import { calcTotals } from "@/lib/proposal/catalog";
 import { isProposalType, isStage, type ProposalItem, type ProposalSection } from "@/lib/proposal/types";
@@ -98,6 +98,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.briefing && typeof body.briefing === "object") patch.briefing = body.briefing;
 
   const [row] = await db.update(proposals).set(patch).where(eq(proposals.id, id)).returning();
+
+  // Orçamento originado de uma OS: mantém valor e vínculo atualizados na OS para correção.
+  const osId = (row.briefing as { osId?: unknown } | null)?.osId;
+  if (typeof osId === "string" && osId) {
+    await db
+      .update(serviceOrders)
+      .set({ budgetProposalId: row.id, budgetProposalNumber: row.number, budgetTotalCents: row.totalCents, updatedAt: new Date() })
+      .where(eq(serviceOrders.id, osId));
+  }
 
   if (body.status && body.status !== current.status) {
     const labels: Record<string, string> = {

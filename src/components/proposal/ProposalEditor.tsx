@@ -623,6 +623,22 @@ export function ProposalEditor({
         </div>
 
         <aside className="no-print space-y-3">
+          {typeof (proposal.briefing as { osId?: unknown } | null)?.osId === "string" ? (
+            <Link
+              href={`/os/${(proposal.briefing as { osId?: string }).osId}`}
+              className="flex items-start gap-2 rounded-xl border border-armed/40 bg-armed/5 p-3 transition hover:border-armed/70"
+            >
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-armed/40 text-[12px] text-armed">⌗</span>
+              <span className="min-w-0">
+                <span className="block text-[11.5px] font-medium text-white">
+                  Orçamento da OS {(proposal.briefing as { osNumber?: string }).osNumber ?? ""}
+                </span>
+                <span className="mt-0.5 block text-[10.5px] leading-relaxed text-steel">
+                  Esta proposta foi gerada por uma ordem de serviço. Ao salvar, o valor da OS é atualizado. Abra a OS →
+                </span>
+              </span>
+            </Link>
+          ) : null}
           <section className="rounded-xl border border-signal/25 bg-signal/5 p-3">
             <div className="flex items-center justify-between gap-2">
               <span className="label-mono text-signal">Resumo ao vivo</span>

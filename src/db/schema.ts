@@ -260,7 +260,57 @@ export type DeliveryTermItem = {
   obs: string;
 };
 
-export type DeliveryTermRow = typeof deliveryTerms.$inferSelect;
+/** Ordem de serviço: execução em campo e, quando necessário, orçamento vinculado. */
+export const serviceOrders = pgTable("service_orders", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  number: text("number").notNull(),
+  kind: text("kind").notNull().default("corretiva"),
+  status: text("status").notNull().default("aberta"),
+  priority: text("priority").notNull().default("normal"),
+  clientId: uuid("client_id"),
+  clientName: text("client_name").notNull(),
+  contact: text("contact"),
+  phone: text("phone"),
+  email: text("email"),
+  site: text("site"),
+  description: text("description").notNull().default(""),
+  diagnosis: text("diagnosis").notNull().default(""),
+  solution: text("solution").notNull().default(""),
+  technician: text("technician").notNull().default(""),
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  laborCents: integer("labor_cents").notNull().default(0),
+  travelCents: integer("travel_cents").notNull().default(0),
+  items: jsonb("items").$type<ServiceOrderItem[]>().notNull().default([]),
+  notes: text("notes").notNull().default(""),
+  clientSignature: text("client_signature").notNull().default(""),
+  /** Proposta de origem (ex.: manutenção vendida) e orçamento gerado pela OS. */
+  originProposalId: uuid("origin_proposal_id"),
+  originProposalNumber: text("origin_proposal_number"),
+  budgetProposalId: uuid("budget_proposal_id"),
+  budgetProposalNumber: text("budget_proposal_number"),
+  budgetTotalCents: integer("budget_total_cents").notNull().default(0),
+  budgetIssuedAt: timestamp("budget_issued_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ServiceOrderItem = {
+  id: string;
+  desc: string;
+  spec: string;
+  unit: string;
+  qty: number;
+  priceCents: number;
+  scope: string;
+  /** false = item apenas de conferência, não entra no orçamento. */
+  billable: boolean;
+  checked: boolean;
+  obs: string;
+};
+
+export type ServiceOrderRow = typeof serviceOrders.$inferSelect;
 
 export type ClientRow = typeof clients.$inferSelect;
 export type ProposalRow = typeof proposals.$inferSelect;

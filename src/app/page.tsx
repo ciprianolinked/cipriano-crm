@@ -74,6 +74,16 @@ export default async function DashboardPage() {
           hint={`${stats.stale.length} propostas sem movimento há 5+ dias`}
           danger={stats.overdue.length > 0}
         />
+        <Link
+          href="/os"
+          className="rounded-xl border border-line/60 bg-abyss2/40 p-3 transition hover:border-signal/50"
+        >
+          <div className="label-mono">Ordens de serviço</div>
+          <div className="mt-1 font-display text-[20px] font-semibold text-white">{stats.openServiceOrders}</div>
+          <div className="mt-0.5 text-[10.5px] text-steel">
+            {stats.fieldServiceOrders > 0 ? `${stats.fieldServiceOrders} em campo` : "campo e orçamentos"}
+          </div>
+        </Link>
       </section>
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">

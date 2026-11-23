@@ -870,3 +870,150 @@ export function renderDeliveryTermPdf(pdf: jsPDF, doc: PdfDeliveryTermData, sett
   sheet.seal(["CFTV IP", "CONTROLE DE ACESSO", "CERCA ELÉTRICA", "REDES ESTRUTURADAS", "LGPD"]);
   sheet.finalize();
 }
+
+export type PdfServiceOrderData = {
+  number: string;
+  kind: string;
+  status: string;
+  priority: string;
+  clientName: string;
+  contact: string | null;
+  phone: string | null;
+  email: string | null;
+  site: string | null;
+  description: string;
+  diagnosis: string;
+  solution: string;
+  technician: string;
+  scheduledAt: string | Date | null;
+  startedAt: string | Date | null;
+  finishedAt: string | Date | null;
+  laborCents: number;
+  travelCents: number;
+  items: { id: string; desc: string; spec: string; unit: string; qty: number; priceCents: number; billable: boolean; checked: boolean; obs: string }[];
+  notes: string;
+  clientSignature: string;
+  originProposalNumber: string | null;
+  budgetProposalNumber: string | null;
+};
+
+const SO_KIND: Record<string, string> = {
+  instalacao: "Instalação",
+  preventiva: "Preventiva",
+  corretiva: "Corretiva",
+  vistoria: "Vistoria",
+  orcamento: "Orçamento",
+};
+
+const SO_STATUS: Record<string, string> = {
+  aberta: "Aberta",
+  agendada: "Agendada",
+  em_execucao: "Em execução",
+  aguardando_orcamento: "Aguardando orçamento",
+  aguardando_aprovacao: "Aguardando aprovação",
+  concluida: "Concluída",
+  cancelada: "Cancelada",
+};
+
+export function renderServiceOrderPdf(pdf: jsPDF, os: PdfServiceOrderData, settings: PdfSettings, logo: string | null) {
+  const partsCents = os.items
+    .filter((i) => i.billable !== false)
+    .reduce((sum, i) => sum + Math.max(0, i.priceCents) * Math.max(0, i.qty), 0);
+  const totalCents = partsCents + Math.max(0, os.laborCents) + Math.max(0, os.travelCents);
+
+  pdf.setProperties({
+    title: `${os.number} · ${os.clientName}`,
+    subject: "Ordem de serviço",
+    author: settings.legalName,
+    creator: "Cipriano Doc Engine 3.0",
+    keywords: "ordem de serviço, OS, manutenção, segurança eletrônica, Cipriano",
+  });
+
+  const sheet = new A4Sheet(
+    pdf,
+    {
+      label: "Ordem de serviço",
+      reference: `${os.number}  |  ${SO_KIND[os.kind] ?? os.kind}`,
+      meta: [
+        `STATUS  ${(SO_STATUS[os.status] ?? os.status).toUpperCase()}`,
+        `AGENDA  ${fmtDate(os.scheduledAt)}`,
+        settings.crea,
+      ],
+      footerLeft: settings.legalName,
+      footerLeft2: `CNPJ ${settings.cnpj}  |  ${settings.phone}`,
+      footerCenter: `${os.number}  |  ${os.clientName}`,
+      footerNote: `${settings.site}  |  ${settings.email}`,
+    },
+    logo,
+  );
+
+  sheet.clientStrip({
+    name: os.clientName,
+    contact: os.technician || "-",
+    email: os.phone || os.email || "",
+    site: os.site || "A confirmar",
+  });
+
+  sheet.heading("01", "Solicitação");
+  if (os.description.trim()) sheet.richText(os.description);
+  sheet.terms([
+    ["Tipo", SO_KIND[os.kind] ?? os.kind],
+    ["Agendada", os.scheduledAt ? fmtDate(os.scheduledAt) : "a agendar"],
+    ["Início / conclusão", `${os.startedAt ? fmtDate(os.startedAt) : "—"} · ${os.finishedAt ? fmtDate(os.finishedAt) : "em aberto"}`],
+    ["Proposta de origem", os.originProposalNumber || "—"],
+  ]);
+
+  sheet.heading("02", "Diagnóstico e solução");
+  sheet.subheading("DIAGNÓSTICO TÉCNICO");
+  sheet.paragraph(os.diagnosis.trim() || "A preencher pelo técnico.");
+  sheet.subheading("SOLUÇÃO EXECUTADA / PROPOSTA");
+  sheet.paragraph(os.solution.trim() || "A preencher pelo técnico.");
+
+  sheet.heading("03", "Peças, materiais e serviços");
+  if (os.items.length) {
+    const checked = os.items.filter((i) => i.checked).length;
+    sheet.subheading(`CHECKLIST · ${checked}/${os.items.length} CONFERIDOS`);
+    sheet.table(
+      [
+        { label: "OK", width: 12, align: "center" },
+        { label: "Descrição", width: 76 },
+        { label: "Un.", width: 13, align: "center" },
+        { label: "Qtd.", width: 14, align: "right" },
+        { label: "Unitário", width: 28, align: "right" },
+        { label: "Total", width: 33, align: "right" },
+      ],
+      os.items.map((item) => [
+        item.checked ? "[X]" : "[ ]",
+        `${item.desc}${item.spec ? ` — ${item.spec}` : ""}${item.billable === false ? " (conferência)" : ""}`,
+        item.unit,
+        String(item.qty),
+        brl(item.priceCents / 100),
+        item.billable === false ? "—" : brl((item.priceCents * item.qty) / 100),
+      ]),
+      ["", "Peças e materiais", "", "", "", brl(partsCents / 100)],
+    );
+  } else {
+    sheet.paragraph("Sem peças registradas. Serviço de mão de obra ou diagnóstico.");
+  }
+  sheet.terms([
+    ["Mão de obra", brl(os.laborCents / 100)],
+    ["Deslocamento", brl(os.travelCents / 100)],
+    ["Total da OS", brl(totalCents / 100)],
+    ...(os.budgetProposalNumber ? ([["Orçamento vinculado", os.budgetProposalNumber]] as [string, string][]) : []),
+  ]);
+
+  sheet.heading("04", "Observações");
+  sheet.paragraph(os.notes.trim() || "Sem observações.");
+
+  sheet.heading("05", "Encerramento");
+  sheet.paragraph(
+    "Declaro que o serviço descrito nesta ordem foi executado e conferido, com os itens acima testados na presença do responsável do cliente. Peças e serviços não previstos dependem de orçamento complementar aprovado.",
+  );
+  sheet.signatures(
+    `${settings.legalName}  |  ${os.technician || settings.director}`,
+    `${os.clientName}  |  ${os.clientSignature || "Responsável pelo recebimento"}`,
+  );
+
+  sheet.seal(["CFTV IP", "CONTROLE DE ACESSO", "CERCA ELÉTRICA", "REDES ESTRUTURADAS", "LGPD"]);
+  sheet.finalize();
+}

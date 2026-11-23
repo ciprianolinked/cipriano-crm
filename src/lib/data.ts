@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { activities, appSettings, catalogItems, clients, proposals } from "@/db/schema";
+import { activities, appSettings, catalogItems, clients, proposals, serviceOrders } from "@/db/schema";
 import type { ActivityRow, CatalogRow, ClientRow, ProposalRow, SettingsRow } from "@/db/schema";
 import { brand } from "@/lib/brand";
 
@@ -139,6 +139,17 @@ export async function dashboardStats() {
   const ticketCents = rows.length > 0 ? Math.round(rows.reduce((a, p) => a + p.totalCents, 0) / rows.length) : 0;
   const stale = open.filter((p) => Date.now() - new Date(p.updatedAt).getTime() > 5 * 86_400_000);
   const overdue = followUps.filter((f) => f.dueAt && new Date(f.dueAt).getTime() < Date.now());
+  // Ordens de serviço em aberto (campo). A tabela pode não existir em bancos antigos.
+  let openServiceOrders = 0;
+  let fieldServiceOrders = 0;
+  try {
+    const osRows = await db.select({ status: serviceOrders.status }).from(serviceOrders);
+    const openStatuses = ["aberta", "agendada", "em_execucao", "aguardando_orcamento", "aguardando_aprovacao"];
+    openServiceOrders = osRows.filter((o) => openStatuses.includes(o.status)).length;
+    fieldServiceOrders = osRows.filter((o) => o.status === "em_execucao").length;
+  } catch {
+    openServiceOrders = 0;
+  }
   return {
     rows,
     open,
@@ -152,6 +163,8 @@ export async function dashboardStats() {
     winRate,
     ticketCents,
     closedCount: closed,
+    openServiceOrders,
+    fieldServiceOrders,
   };
 }
 

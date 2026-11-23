@@ -207,6 +207,43 @@ CREATE TABLE IF NOT EXISTS public.delivery_terms (
   updated_at timestamptz DEFAULT now() NOT NULL
 );
 
+-- Ordens de serviço (campo) e o orçamento gerado a partir delas.
+CREATE TABLE IF NOT EXISTS public.service_orders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  number text NOT NULL,
+  kind text NOT NULL DEFAULT 'corretiva',
+  status text NOT NULL DEFAULT 'aberta',
+  priority text NOT NULL DEFAULT 'normal',
+  client_id uuid,
+  client_name text NOT NULL,
+  contact text,
+  phone text,
+  email text,
+  site text,
+  description text DEFAULT '' NOT NULL,
+  diagnosis text DEFAULT '' NOT NULL,
+  solution text DEFAULT '' NOT NULL,
+  technician text DEFAULT '' NOT NULL,
+  scheduled_at timestamptz,
+  started_at timestamptz,
+  finished_at timestamptz,
+  labor_cents integer DEFAULT 0 NOT NULL,
+  travel_cents integer DEFAULT 0 NOT NULL,
+  items jsonb DEFAULT '[]'::jsonb NOT NULL,
+  notes text DEFAULT '' NOT NULL,
+  client_signature text DEFAULT '' NOT NULL,
+  origin_proposal_id uuid,
+  origin_proposal_number text,
+  budget_proposal_id uuid,
+  budget_proposal_number text,
+  budget_total_cents integer DEFAULT 0 NOT NULL,
+  budget_issued_at timestamptz,
+  created_at timestamptz DEFAULT now() NOT NULL,
+  updated_at timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS service_orders_status_idx ON public.service_orders (status, scheduled_at);
+
 CREATE TABLE IF NOT EXISTS public.app_settings (
   id text PRIMARY KEY DEFAULT 'default' NOT NULL,
   company_name text DEFAULT 'Cipriano Tech & Security' NOT NULL,
@@ -325,7 +362,7 @@ WHERE p.items::text ~* '(monitoramento.*noc|noc\s*24|monitoramento\s*24)';
 
 COMMIT;
 
--- Confirmação: o resultado deve ser 13 no database selecionado.
+-- Confirmação: o resultado deve ser 14 no database selecionado.
 SELECT count(*) AS tabelas_do_aplicativo, current_database() AS database_atual
 FROM pg_tables
 WHERE schemaname = 'public'
@@ -334,5 +371,5 @@ WHERE schemaname = 'public'
     'catalog_price_revisions', 'maintenance_contracts',
     'maintenance_readjusts', 'maintenance_document_revisions',
     'ipca_history', 'economic_index_values', 'reference_files',
-    'delivery_terms', 'app_settings'
+    'delivery_terms', 'service_orders', 'app_settings'
   );
