@@ -39,7 +39,6 @@ export type ServiceOrderDocData = {
   startedAt: string | Date | null;
   finishedAt: string | Date | null;
   laborCents: number;
-  travelCents: number;
   items: ServiceOrderItem[];
   notes: string;
   clientSignature: string;
@@ -218,20 +217,6 @@ export function ServiceOrderDocument({
                   step={10}
                   align="right"
                   onChange={edit && ((v) => edit.patch({ laborCents: Math.round(v * 100) }))}
-                />
-              </span>
-            </div>
-            <div className="cip-term-row">
-              <b>Deslocamento</b>
-              <span className="cip-inline-row">
-                <span>R$</span>
-                <InlineNumber
-                  editable={editable}
-                  value={parts.travelCents / 100}
-                  min={0}
-                  step={10}
-                  align="right"
-                  onChange={edit && ((v) => edit.patch({ travelCents: Math.round(v * 100) }))}
                 />
               </span>
             </div>

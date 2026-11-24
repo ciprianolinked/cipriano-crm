@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { serviceOrders, type ServiceOrderItem } from "@/db/schema";
+import { proposals, serviceOrders, type ServiceOrderItem } from "@/db/schema";
 import { ensureSchema } from "@/lib/db-migrations";
 import { OS_KINDS, OS_PRIORITIES, OS_STATUSES, soPartsCents } from "@/lib/service-orders";
 
@@ -79,7 +79,7 @@ export async function PATCH(request: Request, { params }: Context) {
   for (const key of ["scheduledAt", "startedAt", "finishedAt"] as const) {
     if (key in body) patch[key] = iso(body[key]);
   }
-  for (const key of ["laborCents", "travelCents"] as const) {
+  for (const key of ["laborCents"] as const) {
     if (key in body) patch[key] = Math.max(0, Math.round(Number(body[key] ?? 0) || 0));
   }
   if (Array.isArray(body.items)) {
@@ -97,8 +97,20 @@ export async function PATCH(request: Request, { params }: Context) {
     })) as ServiceOrderItem[];
   }
   if ("originProposalId" in body) {
-    patch.originProposalId = body.originProposalId ? String(body.originProposalId) : null;
-    patch.originProposalNumber = body.originProposalNumber ? String(body.originProposalNumber) : null;
+    const raw = body.originProposalId ? String(body.originProposalId) : null;
+    if (raw) {
+      const [prop] = await db
+        .select({ id: proposals.id, number: proposals.number })
+        .from(proposals)
+        .where(eq(proposals.id, raw))
+        .limit(1);
+      if (!prop) return NextResponse.json({ error: "Proposta de origem não encontrada." }, { status: 404 });
+      patch.originProposalId = prop.id;
+      patch.originProposalNumber = prop.number;
+    } else {
+      patch.originProposalId = null;
+      patch.originProposalNumber = null;
+    }
   }
 
   const [row] = await db.update(serviceOrders).set(patch).where(eq(serviceOrders.id, id)).returning();

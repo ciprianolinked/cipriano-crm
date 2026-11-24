@@ -41,7 +41,6 @@ export default async function OsDetailPage({ params }: { params: Promise<{ id: s
     startedAt: os.startedAt ? os.startedAt.toISOString() : null,
     finishedAt: os.finishedAt ? os.finishedAt.toISOString() : null,
     laborCents: os.laborCents,
-    travelCents: os.travelCents,
     items: os.items,
     notes: os.notes,
     clientSignature: os.clientSignature,

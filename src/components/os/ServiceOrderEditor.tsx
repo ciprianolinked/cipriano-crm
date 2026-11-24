@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { CheckCircle2, FileDown, FileText, LoaderCircle, Plus, Printer, Sparkles, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { CheckCircle2, FileDown, FileText, LoaderCircle, Plus, Printer, Sparkles, Unlink, Trash2 } from "lucide-react";
 import { brl, fmtDate } from "@/lib/brand";
 import { fetchJson } from "@/lib/api-client";
 import { OS_KINDS, OS_PRIORITIES, OS_STATUSES, osStatus, soPartsCents } from "@/lib/service-orders";
@@ -40,6 +40,80 @@ export function ServiceOrderEditor({
 }) {
   const router = useRouter();
   const [os, setOs] = useState<EditableOs>(initial);
+  const [proposals, setProposals] = useState<{ id: string; number: string; clientName: string; site: string | null; status: string }[]>([]);
+  const [proposalsBusy, setProposalsBusy] = useState(false);
+  const [originSelection, setOriginSelection] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+
+  const loadProposals = useCallback(async () => {
+    try {
+      const data = await fetchJson<{ proposals: { id: string; number: string; clientName: string; site: string | null; status: string }[] }>("/api/proposals");
+      setProposals(data.proposals.filter((p) => p.status !== "perdido"));
+    } catch {
+      /* mantém lista vazia; se cliente novo veio em outra aba, recarregue a página */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadProposals();
+  }, [loadProposals]);
+
+  const originProposal = os.originProposalId ? proposals.find((p) => p.id === os.originProposalId) : null;
+
+  function applyOriginProposal(id: string) {
+    setOriginSelection(id);
+    void linkProposal(id);
+  }
+
+  async function linkProposal(proposalId: string) {
+    setProposalsBusy(true);
+    setError("");
+    try {
+      const data = await fetchJson<{ serviceOrder: EditableOs }>(`/api/service-orders/${os.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ originProposalId: proposalId }),
+      });
+      setOs((prev) => ({
+        ...prev,
+        ...data.serviceOrder,
+        originProposalId: data.serviceOrder.originProposalId,
+        originProposalNumber: data.serviceOrder.originProposalNumber,
+      }));
+      setOriginSelection("");
+      setNotice(data.serviceOrder.originProposalId ? `Vinculada à proposta ${data.serviceOrder.originProposalNumber}.` : "Vínculo removido.");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao vincular a proposta.");
+    } finally {
+      setProposalsBusy(false);
+    }
+  }
+
+  async function rewriteWithAI() {
+    if (aiBusy) return;
+    setAiBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const data = await fetchJson<{ blocks: Partial<Pick<EditableOs, "description" | "diagnosis" | "solution" | "notes">>; message: string }>(
+        `/api/service-orders/${os.id}/rewrite`,
+        { method: "POST" },
+      );
+      setOs((prev) => ({
+        ...prev,
+        description: data.blocks.description ?? prev.description,
+        diagnosis: data.blocks.diagnosis ?? prev.diagnosis,
+        solution: data.blocks.solution ?? prev.solution,
+        notes: data.blocks.notes ?? prev.notes,
+      }));
+      setDirty(true);
+      setNotice(data.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "IA indisponível no momento.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -82,7 +156,6 @@ export function ServiceOrderEditor({
         notes: os.notes,
         clientSignature: os.clientSignature,
         laborCents: os.laborCents,
-        travelCents: os.travelCents,
         items: os.items,
         ...extra,
       };
@@ -218,7 +291,7 @@ export function ServiceOrderEditor({
         <div className="flex flex-wrap items-center gap-3 border-t border-line/40 px-4 py-2 text-[11.5px] lg:px-6">
           <span className={`chip ${status.tone}`}>{status.label}</span>
           <span className="text-steel">{status.hint}</span>
-          <span className="ml-auto text-steel">Peças {brl(parts.partsCents / 100)} · Mão de obra {brl(parts.laborCents / 100)} · Deslocamento {brl(parts.travelCents / 100)}</span>
+          <span className="ml-auto text-steel">Peças {brl(parts.partsCents / 100)} · Mão de obra {brl(parts.laborCents / 100)}</span>
           <span className="font-display text-[14px] font-semibold text-signal">{brl(parts.totalCents / 100)}</span>
         </div>
       </header>
@@ -273,7 +346,7 @@ export function ServiceOrderEditor({
             ) : (
               <div className="mt-2 space-y-2">
                 <p className="text-[11.5px] leading-relaxed text-steel">
-                  Gere uma proposta com as peças cobráveis, mão de obra e deslocamento. O documento é criado já vinculado a esta
+                  Gere uma proposta com as peças cobráveis e a mão de obra. O documento é criado já vinculado a esta
                   OS para correção e envio ao cliente.
                 </p>
                 <button
@@ -285,8 +358,49 @@ export function ServiceOrderEditor({
                   {budgetBusy ? "Gerando orçamento…" : "Gerar orçamento vinculado"}
                 </button>
                 {parts.totalCents <= 0 ? (
-                  <p className="text-[10.5px] text-amber">Inclua peças cobráveis, mão de obra ou deslocamento para gerar o orçamento.</p>
+                  <p className="text-[10.5px] text-amber">Inclua peças cobráveis ou mão de obra para gerar o orçamento.</p>
                 ) : null}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-line/60 bg-navy/30 p-3">
+            <div className="label-mono text-signal">Proposta de origem</div>
+            {os.originProposalId ? (
+              <div className="mt-2 space-y-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <Link href={`/propostas/${os.originProposalId}`} className="font-mono text-[12px] text-signal hover:underline">
+                    {os.originProposalNumber}
+                  </Link>
+                  <span className="text-[10.5px] text-steel">{originProposal?.status ?? "proposta"}</span>
+                </div>
+                <p className="text-[10.5px] leading-relaxed text-steel">
+                  {originProposal?.clientName ?? "Proposta vinculada"} — ao abrir, você vê a proposta e pode voltar para esta OS.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  <Link href={`/propostas/${os.originProposalId}`} className="btn px-2.5 py-1 text-[11px]">Abrir proposta</Link>
+                  <button className="btn px-2.5 py-1 text-[11px] !text-alarm" onClick={() => void linkProposal("")} disabled={proposalsBusy}>
+                    {proposalsBusy ? <LoaderCircle size={11} className="animate-spin" /> : <Unlink size={11} />} Remover vínculo
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2 space-y-2">
+                <p className="text-[10.5px] leading-relaxed text-steel">
+                  Se esqueceu de vincular a proposta na abertura, vincule aqui — a OS pode nascer de uma proposta de instalação ou manutenção.
+                </p>
+                <select className="field text-[12px]" value={originSelection} onChange={(e) => setOriginSelection(e.target.value)}>
+                  <option value="">Selecione uma proposta…</option>
+                  {proposals.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.number} · {p.clientName} ({p.status})
+                    </option>
+                  ))}
+                </select>
+                <button className="btn btn-primary w-full px-2 py-2 text-[11.5px]" disabled={!originSelection || proposalsBusy} onClick={() => applyOriginProposal(originSelection)}>
+                  {proposalsBusy ? <LoaderCircle size={12} className="animate-spin" /> : null}
+                  Vincular proposta
+                </button>
               </div>
             )}
           </section>
@@ -382,21 +496,27 @@ export function ServiceOrderEditor({
             >
               <Plus size={12} /> Adicionar item
             </button>
-            <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="mt-2">
               <Field label="Mão de obra (R$)">
                 <input type="number" min={0} step={10} className="field" value={os.laborCents / 100} onChange={(e) => update({ laborCents: Math.round(Number(e.target.value) * 100) })} />
-              </Field>
-              <Field label="Deslocamento (R$)">
-                <input type="number" min={0} step={10} className="field" value={os.travelCents / 100} onChange={(e) => update({ travelCents: Math.round(Number(e.target.value) * 100) })} />
               </Field>
             </div>
           </Panel>
 
           <Panel title="Laudo técnico" hint="Alimenta o orçamento gerado">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10.5px] leading-relaxed text-steel">
+                Reescreve os textos em linguagem formal, preservando fatos, números e prazos.
+              </div>
+              <button className="btn !border-signal/40 !text-signal px-3 py-1.5 text-[11px]" onClick={() => void rewriteWithAI()} disabled={aiBusy}>
+                {aiBusy ? <LoaderCircle size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                {aiBusy ? "Reescrevendo…" : "Refinar com IA"}
+              </button>
+            </div>
             <Field label="Diagnóstico">
               <textarea className="field min-h-[70px]" value={os.diagnosis} onChange={(e) => update({ diagnosis: e.target.value })} />
             </Field>
-            <Field label="Solução executada">
+            <Field label="Solução executada / proposta">
               <textarea className="field min-h-[70px]" value={os.solution} onChange={(e) => update({ solution: e.target.value })} />
             </Field>
             <Field label="Observações ao cliente">

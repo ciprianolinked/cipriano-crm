@@ -3,21 +3,26 @@
 ## Fluxo
 
 1. **Abrir a OS** em `/os/nova`: cliente (do cadastro ou manual), tipo, prioridade, técnico, agenda,
-   solicitação, diagnóstico, solução, peças do catálogo e mão de obra/deslocamento.
+   solicitação, diagnóstico, solução, peças do catálogo e mão de obra.
    A OS pode nascer de uma proposta (`originProposalId`), herdando cliente, local e itens
-   **apenas como checklist** (`billable: false`), sem cobrança duplicada.
+   **apenas como checklist** (`billable: false`), sem cobrança duplicada. Se esquecido, o vínculo
+   pode ser feito depois no card "Proposta de origem" do editor.
 2. **Executar** em `/os/[id]`: checklist com conferência, laudo técnico, PDF A4 e impressão.
    Datas de início/conclusão acompanham o status.
-3. **Gerar orçamento** quando houver peças cobráveis, mão de obra ou deslocamento:
+3. **Gerar orçamento** quando houver peças cobráveis ou mão de obra:
    `POST /api/service-orders/[id]/budget` cria uma **proposta comercial** com peças + mão de obra +
    deslocamento, e grava o vínculo nos dois lados:
    - OS: `budget_proposal_id`, `budget_proposal_number`, `budget_total_cents`, `budget_issued_at`;
    - Proposta: `briefing.osId` e `briefing.osNumber`.
 4. **Corrigir**: o botão “Corrigir orçamento” abre `/propostas/[id]`. Ao salvar a proposta, o
    `PATCH /api/proposals/[id]` atualiza o valor da OS automaticamente.
-5. **Nova versão**: `POST .../budget { regenerate: true }` cria a próxima revisão do orçamento
+5. **Reescrever com IA**: o editor tem o botão "Refinar com IA" sobre o laudo técnico; reescreve
+   solicitação, diagnóstico, solução e observações em linguagem formal preservando fatos e números.
+   A IA roda apenas com `OPENAI_API_KEY` configurada; sem ela o botão devolve mensagem clara e
+   preserva os textos originais.
+6. **Nova versão**: `POST .../budget { regenerate: true }` cria a próxima revisão do orçamento
    (mesmo `revisionGroupId`, `revision + 1`) e revincula a OS à versão nova.
-6. **Desvincular** (`DELETE .../budget`) e **excluir a OS** preservam a proposta de orçamento.
+7. **Desvincular** (`DELETE .../budget`) e **excluir a OS** preservam a proposta de orçamento.
 
 ## Números
 

@@ -281,7 +281,6 @@ export const serviceOrders = pgTable("service_orders", {
   startedAt: timestamp("started_at", { withTimezone: true }),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
   laborCents: integer("labor_cents").notNull().default(0),
-  travelCents: integer("travel_cents").notNull().default(0),
   items: jsonb("items").$type<ServiceOrderItem[]>().notNull().default([]),
   notes: text("notes").notNull().default(""),
   clientSignature: text("client_signature").notNull().default(""),

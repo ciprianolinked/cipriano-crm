@@ -228,7 +228,6 @@ CREATE TABLE IF NOT EXISTS public.service_orders (
   started_at timestamptz,
   finished_at timestamptz,
   labor_cents integer DEFAULT 0 NOT NULL,
-  travel_cents integer DEFAULT 0 NOT NULL,
   items jsonb DEFAULT '[]'::jsonb NOT NULL,
   notes text DEFAULT '' NOT NULL,
   client_signature text DEFAULT '' NOT NULL,
@@ -241,6 +240,9 @@ CREATE TABLE IF NOT EXISTS public.service_orders (
   created_at timestamptz DEFAULT now() NOT NULL,
   updated_at timestamptz DEFAULT now() NOT NULL
 );
+
+-- Coluna 'travel_cents' não usada pela empresa: para bancos antigos que ainda têm a coluna,
+-- ela pode ser removida manualmente com: ALTER TABLE public.service_orders DROP COLUMN IF EXISTS travel_cents;
 
 CREATE INDEX IF NOT EXISTS service_orders_status_idx ON public.service_orders (status, scheduled_at);
 

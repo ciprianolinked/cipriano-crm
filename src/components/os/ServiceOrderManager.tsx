@@ -31,7 +31,6 @@ export type OsListItem = {
   scheduledAt: string | null;
   items: ServiceOrderItem[];
   laborCents: number;
-  travelCents: number;
   budgetProposalId: string | null;
   budgetProposalNumber: string | null;
   budgetTotalCents: number;

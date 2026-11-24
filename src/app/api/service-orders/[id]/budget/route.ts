@@ -42,7 +42,7 @@ export async function POST(request: Request, { params }: Context) {
   const parts = soPartsCents(os);
   if (parts.totalCents <= 0) {
     return NextResponse.json(
-      { error: "Inclua peças, mão de obra ou deslocamento cobrável antes de gerar o orçamento." },
+      { error: "Inclua peças cobráveis ou mão de obra antes de gerar o orçamento." },
       { status: 400 },
     );
   }
@@ -63,7 +63,6 @@ export async function POST(request: Request, { params }: Context) {
       solution: os.solution,
       items: os.items,
       laborCents: os.laborCents,
-      travelCents: os.travelCents,
       notes: os.notes,
       technician: os.technician,
     },

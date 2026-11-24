@@ -134,7 +134,6 @@ const MIGRATIONS: string[] = [
     started_at timestamptz,
     finished_at timestamptz,
     labor_cents integer NOT NULL DEFAULT 0,
-    travel_cents integer NOT NULL DEFAULT 0,
     items jsonb NOT NULL DEFAULT '[]'::jsonb,
     notes text NOT NULL DEFAULT '',
     client_signature text NOT NULL DEFAULT '',

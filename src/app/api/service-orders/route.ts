@@ -113,7 +113,6 @@ export async function POST(request: Request) {
   const status = statusIds.includes(String(body.status) as (typeof statusIds)[number]) ? String(body.status) : "aberta";
   const priority = priorityIds.includes(String(body.priority) as (typeof priorityIds)[number]) ? String(body.priority) : "normal";
   const laborCents = Math.max(0, Math.round(Number(body.laborCents ?? 0) || 0));
-  const travelCents = Math.max(0, Math.round(Number(body.travelCents ?? 0) || 0));
 
   const [row] = await db
     .insert(serviceOrders)
@@ -134,7 +133,6 @@ export async function POST(request: Request) {
       technician: String(body.technician ?? "").trim(),
       scheduledAt: iso(body.scheduledAt),
       laborCents,
-      travelCents,
       items,
       notes: String(body.notes ?? "").trim(),
       clientSignature: String(body.clientSignature ?? "").trim(),

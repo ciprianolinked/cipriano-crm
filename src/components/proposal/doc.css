@@ -2,10 +2,10 @@
   width: 794px;
   min-height: 1123px;
   background: #ffffff;
-  color: #33465e;
+  color: #27364e;
   font-family: "IBM Plex Sans", "Inter", Arial, sans-serif;
-  font-size: 11.2px;
-  line-height: 1.62;
+  font-size: 11.8px;
+  line-height: 1.72;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -162,7 +162,7 @@
 
 .cip-head {
   background: #0a192f;
-  padding: 30px 44px 24px;
+  padding: 28px 46px 24px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -178,7 +178,7 @@
 
 .cip-brand-name {
   font-family: "Space Grotesk", "Inter", sans-serif;
-  font-size: 23px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: 0.015em;
   color: #ffffff;
@@ -196,8 +196,8 @@
 }
 
 .cip-brand-tag {
-  font-size: 9.4px;
-  color: #7d93ad;
+  font-size: 9.8px;
+  color: #8fa6bd;
   margin-top: 8px;
   max-width: 250px;
   line-height: 1.45;
@@ -227,7 +227,7 @@
 
 .cip-head-meta div.cip-meta-line {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 8.6px;
+  font-size: 9.2px;
   letter-spacing: 0.1em;
   color: #9fb2c7;
   margin-top: 3px;
@@ -242,56 +242,56 @@
 .cip-strip {
   display: grid;
   grid-template-columns: 1.3fr 1fr 1.2fr;
-  gap: 14px;
-  padding: 14px 44px;
+  gap: 18px;
+  padding: 18px 46px;
   background: #f4f8fc;
   border-bottom: 1px solid #dce4ee;
 }
 
 .cip-strip-label {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 7.4px;
+  font-size: 8.2px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #7d93ad;
-  margin-bottom: 2px;
+  color: #5c7490;
+  margin-bottom: 3px;
 }
 
 .cip-strip-value {
-  font-size: 10.4px;
+  font-size: 11.4px;
   color: #0a192f;
-  font-weight: 500;
-  line-height: 1.35;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .cip-strip-value small {
   display: block;
   font-weight: 400;
-  color: #5a6e88;
-  font-size: 9.4px;
-  margin-top: 1px;
+  color: #44576f;
+  font-size: 10px;
+  margin-top: 3px;
 }
 
 .cip-body {
-  padding: 24px 44px 26px;
+  padding: 30px 46px 28px;
   flex: 1;
 }
 
 .cip-sec {
-  margin-bottom: 28px;
+  margin-bottom: 36px;
   break-inside: avoid;
 }
 
 .cip-sec-head {
   display: flex;
   align-items: center;
-  gap: 11px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .cip-sec-num {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: 9.6px;
   letter-spacing: 0.08em;
   color: #00a8bd;
   border: 1px solid #cfe9f0;
@@ -302,9 +302,9 @@
 
 .cip-sec-title {
   font-family: "Space Grotesk", "Inter", sans-serif;
-  font-size: 11.6px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
+  font-size: 13.2px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #0a192f;
   white-space: nowrap;
@@ -318,17 +318,19 @@
 
 .cip-p {
   margin: 0 0 9px;
-  color: #33465e;
+  color: #27364e;
   text-align: justify;
-  line-height: 1.65;
+  line-height: 1.75;
+  font-size: 12.4px;
 }
 
 .cip-b {
   display: flex;
-  gap: 8px;
-  margin: 0 0 6px;
-  color: #33465e;
-  line-height: 1.62;
+  gap: 9px;
+  margin: 0 0 7px;
+  color: #27364e;
+  line-height: 1.7;
+  font-size: 12.2px;
 }
 
 .cip-b-marker {
@@ -345,26 +347,27 @@
 .cip-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 9.6px;
+  font-size: 10.6px;
 }
 
 .cip-table th {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 7.4px;
-  letter-spacing: 0.14em;
+  font-size: 8.2px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #7d93ad;
+  color: #556d88;
   text-align: left;
-  padding: 8px 10px;
+  padding: 9px 11px;
   background: #f4f8fc;
-  border-bottom: 1px solid #dce4ee;
+  border-bottom: 1px solid #d5deea;
 }
 
 .cip-table td {
-  padding: 8px 10px;
+  padding: 9px 11px;
   border-bottom: 1px solid #e8eff7;
   vertical-align: top;
-  color: #33465e;
+  color: #27364e;
+  line-height: 1.55;
 }
 
 .cip-table td.num,
@@ -382,33 +385,33 @@
 
 .cip-item-title {
   color: #0a192f;
-  font-weight: 500;
-  font-size: 10px;
+  font-weight: 600;
+  font-size: 11px;
 }
 
 .cip-item-spec {
-  color: #7d93ad;
-  font-size: 8.7px;
-  line-height: 1.35;
-  margin-top: 1px;
+  color: #5c7490;
+  font-size: 9.6px;
+  line-height: 1.4;
+  margin-top: 2px;
 }
 
 .cip-group {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 8px;
+  font-size: 8.6px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: #0a192f;
-  background: #eef4fa;
-  padding: 6px 8px;
-  border-left: 2px solid #00e5ff;
-  margin: 16px 0 6px;
+  background: #e9f1fa;
+  padding: 7px 9px;
+  border-left: 2px solid #00a8bd;
+  margin: 18px 0 8px;
 }
 
 .cip-totals {
   background: #0a192f;
   color: #c6d2e0;
-  padding: 18px 22px;
+  padding: 22px 26px;
   border-radius: 4px;
   display: grid;
   grid-template-columns: 1.1fr 1fr;
@@ -432,7 +435,7 @@
 
 .cip-totals .cip-t-big {
   font-family: "Space Grotesk", "Inter", sans-serif;
-  font-size: 25px;
+  font-size: 28px;
   font-weight: 700;
   color: #00e5ff;
   letter-spacing: -0.02em;
@@ -441,30 +444,31 @@
 }
 
 .cip-totals .cip-t-sub {
-  font-size: 9px;
-  color: #9fb2c7;
+  font-size: 10px;
+  color: #c2d0df;
+  line-height: 1.5;
 }
 
 .cip-mini-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 18px;
-  margin-top: 8px;
+  gap: 10px 22px;
+  margin-top: 12px;
 }
 
 .cip-mini {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
-  border-bottom: 1px dotted #dce4ee;
-  padding-bottom: 3px;
-  font-size: 9.6px;
+  gap: 12px;
+  border-bottom: 1px dotted #d5deea;
+  padding-bottom: 5px;
+  font-size: 10.6px;
 }
 
 .cip-mini span:first-child {
-  color: #7d93ad;
+  color: #5c7490;
   font-family: "IBM Plex Mono", monospace;
-  font-size: 7.8px;
+  font-size: 8.4px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   padding-top: 2px;
@@ -473,25 +477,26 @@
 .cip-mini span:last-child {
   color: #0a192f;
   text-align: right;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 11.6px;
 }
 
 .cip-terms {
-  border: 1px solid #dce4ee;
-  border-left: 3px solid #00e5ff;
-  background: #f9fbfd;
-  padding: 14px 16px;
+  border: 1px solid #d5deea;
+  border-left: 3px solid #00a8bd;
+  background: #fafcfe;
+  padding: 13px 18px;
   margin: 12px 0 14px;
   border-radius: 2px;
 }
 
 .cip-term-row {
   display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 12px;
-  padding: 6px 0;
-  font-size: 10.2px;
-  border-bottom: 1px dotted #e4eaf2;
+  grid-template-columns: 160px 1fr;
+  gap: 14px;
+  padding: 8px 0;
+  font-size: 11.4px;
+  border-bottom: 1px dotted #d5deea;
 }
 
 .cip-term-row:last-child {
@@ -500,26 +505,26 @@
 
 .cip-term-row b {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 7.8px;
-  letter-spacing: 0.12em;
+  font-size: 8.2px;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #7d93ad;
-  font-weight: 400;
-  padding-top: 2px;
+  color: #5c7490;
+  font-weight: 500;
+  padding-top: 3px;
 }
 
 .cip-sign {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 30px;
-  margin-top: 20px;
+  gap: 34px;
+  margin-top: 38px;
 }
 
 .cip-sign-line {
   border-top: 1px solid #0a192f;
-  padding-top: 4px;
-  font-size: 8.8px;
-  color: #5a6e88;
+  padding-top: 6px;
+  font-size: 9.6px;
+  color: #44576f;
   font-family: "IBM Plex Mono", monospace;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -538,9 +543,9 @@
 
 .cip-foot div {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 7.6px;
+  font-size: 8.4px;
   letter-spacing: 0.08em;
-  color: #7d93ad;
+  color: #556d88;
   text-transform: uppercase;
   line-height: 1.5;
 }
@@ -551,28 +556,35 @@
 }
 
 .cip-seal {
-  margin-top: 6px;
+  margin-top: 12px;
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 6px;
 }
 
 .cip-seal span {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 7px;
+  font-size: 8px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #0a192f;
-  border: 1px solid #dce4ee;
+  border: 1px solid #d5deea;
   border-radius: 2px;
-  padding: 1px 5px;
+  padding: 3px 7px;
 }
 
 @media print {
+  html, body {
+    background: #ffffff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
   .cip-doc {
     box-shadow: none;
     width: 210mm;
     min-height: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   .cip-sec {
     break-inside: avoid;

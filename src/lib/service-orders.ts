@@ -58,11 +58,10 @@ export function itemsTotalCents(items: ServiceOrderItem[] | undefined | null): n
   );
 }
 
-export function soPartsCents(os: { items?: ServiceOrderItem[] | null; laborCents?: number | null; travelCents?: number | null }) {
+export function soPartsCents(os: { items?: ServiceOrderItem[] | null; laborCents?: number | null }) {
   const parts = itemsTotalCents(os.items);
   const labor = Math.max(0, Math.round(Number(os.laborCents) || 0));
-  const travel = Math.max(0, Math.round(Number(os.travelCents) || 0));
-  return { partsCents: parts, laborCents: labor, travelCents: travel, totalCents: parts + labor + travel };
+  return { partsCents: parts, laborCents: labor, totalCents: parts + labor };
 }
 
 export const soTotalCents = (os: Parameters<typeof soPartsCents>[0]) => soPartsCents(os).totalCents;
@@ -94,7 +93,6 @@ export type ServiceOrderForBudget = {
   solution: string;
   items: ServiceOrderItem[];
   laborCents: number;
-  travelCents: number;
   notes: string;
   technician: string;
 };
@@ -110,7 +108,7 @@ export type BudgetSettings = {
 
 /**
  * Monta a proposta de orçamento a partir da OS: peças e materiais (itens marcados como
- * cobráveis) + mão de obra + deslocamento. O briefing guarda os vínculos osId/osNumber,
+ * cobráveis) + mão de obra. O briefing guarda os vínculos osId/osNumber,
  * permitindo voltar da proposta para a OS e corrigir o orçamento.
  */
 export function buildBudgetDraft(os: ServiceOrderForBudget, settings: BudgetSettings): ProposalDraft {
@@ -137,18 +135,6 @@ export function buildBudgetDraft(os: ServiceOrderForBudget, settings: BudgetSett
       unit: "vb",
       qty: 1,
       price: os.laborCents / 100,
-      scope: "Serviços técnicos",
-    });
-  }
-  if (os.travelCents > 0) {
-    items.push({
-      id: uid("os-travel"),
-      kind: "servico",
-      desc: "Deslocamento e logística",
-      spec: "Visita técnica e transporte de materiais",
-      unit: "vb",
-      qty: 1,
-      price: os.travelCents / 100,
       scope: "Serviços técnicos",
     });
   }
@@ -190,7 +176,7 @@ export function buildBudgetDraft(os: ServiceOrderForBudget, settings: BudgetSett
       enabled: true,
       kind: "totals",
       locked: true,
-      body: `Valor total de ${brl(total / 100)}, com peças, mão de obra e deslocamento discriminados. Orçamento vinculado à OS ${os.number} e sujeito à aprovação do cliente antes da execução.`,
+      body: `Valor total de ${brl(total / 100)}, com peças e mão de obra discriminados. Orçamento vinculado à OS ${os.number} e sujeito à aprovação do cliente antes da execução.`,
     },
     {
       id: "condicoes",
@@ -255,7 +241,6 @@ export function serviceOrderStats(rows: {
   kind: string;
   items: ServiceOrderItem[] | null;
   laborCents: number;
-  travelCents: number;
   budgetTotalCents: number;
   scheduledAt: Date | string | null;
 }[]) {

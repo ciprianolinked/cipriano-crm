@@ -31,7 +31,6 @@ export default async function OsPage() {
     scheduledAt: os.scheduledAt ? os.scheduledAt.toISOString() : null,
     items: os.items,
     laborCents: os.laborCents,
-    travelCents: os.travelCents,
     budgetProposalId: os.budgetProposalId,
     budgetProposalNumber: os.budgetProposalNumber,
     budgetTotalCents: os.budgetTotalCents,

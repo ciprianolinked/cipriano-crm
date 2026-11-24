@@ -61,7 +61,6 @@ export function NewServiceOrderForm({
     solution: "",
     notes: "",
     laborValue: 0,
-    travelValue: 0,
   });
   const [items, setItems] = useState<ServiceOrderItem[]>([]);
   const [pick, setPick] = useState("");
@@ -135,7 +134,6 @@ export function NewServiceOrderForm({
           scheduledAt: form.scheduledAt ? new Date(`${form.scheduledAt}T12:00:00`).toISOString() : null,
           items,
           laborCents: Math.round((Number(form.laborValue) || 0) * 100),
-          travelCents: Math.round((Number(form.travelValue) || 0) * 100),
           originProposalId: originProposalId || null,
         }),
       });
@@ -147,7 +145,7 @@ export function NewServiceOrderForm({
   }
 
   const billableTotal = items.filter((i) => i.billable).reduce((sum, i) => sum + i.priceCents * i.qty, 0);
-  const total = billableTotal + Math.round((Number(form.laborValue) || 0) * 100) + Math.round((Number(form.travelValue) || 0) * 100);
+  const total = billableTotal + Math.round((Number(form.laborValue) || 0) * 100);
 
   return (
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -334,12 +332,9 @@ export function NewServiceOrderForm({
             )}
           </div>
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="mt-3">
             <Field label="Mão de obra (R$)">
               <input type="number" min={0} step={10} className="field" value={form.laborValue} onChange={(e) => update({ laborValue: Number(e.target.value) })} />
-            </Field>
-            <Field label="Deslocamento (R$)">
-              <input type="number" min={0} step={10} className="field" value={form.travelValue} onChange={(e) => update({ travelValue: Number(e.target.value) })} />
             </Field>
           </div>
 
@@ -365,7 +360,6 @@ export function NewServiceOrderForm({
           <div className="mt-3 space-y-1.5 text-[11.5px]">
             <Row label="Peças cobráveis" value={brl(billableTotal / 100)} />
             <Row label="Mão de obra" value={brl((Number(form.laborValue) || 0))} />
-            <Row label="Deslocamento" value={brl((Number(form.travelValue) || 0))} />
             <div className="mt-2 flex items-center justify-between border-t border-line/40 pt-2">
               <span className="text-steel">Total da OS</span>
               <span className="font-display text-[18px] font-semibold text-signal">{brl(total / 100)}</span>

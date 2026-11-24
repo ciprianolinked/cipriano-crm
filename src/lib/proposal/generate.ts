@@ -429,7 +429,7 @@ export function buildSections(input: {
   ])}\n\nSe o aterramento não estiver contemplado nos itens desta proposta, será especificado pela Cipriano e executado pelo cliente por profissional habilitado, com medição e laudo antes da energização.`;
 
   const consideracoes = bullets([
-    "Os preços incluem materiais, mão de obra, deslocamento na Grande São Paulo, impostos e frete. Serviços em outras regiões têm logística orçada à parte.",
+    "Os preços incluem materiais, mão de obra, impostos e frete. Serviços em outras regiões têm valores orçados à parte.",
     "O cliente deve garantir acesso ao local, áreas de trabalho livres, janelas de execução e um responsável técnico para aprovações.",
     "Interrupções no fornecimento de energia, danos por terceiros, vandalismo e descargas atmosféricas não são de responsabilidade da Cipriano.",
     "Os prazos são contados em dias úteis e começam no aceite formal e na liberação de obra (e não na emissão desta proposta).",
@@ -474,7 +474,7 @@ export function buildSections(input: {
     `Garantia: ${warranty}.`,
     `Validade da proposta: ${validityDays} dias corridos a partir da emissão.`,
     "Horas técnicas adicionais: R$ 140,00/hora por profissional, com aprovação prévia por e-mail.",
-    "Frete e deslocamento inclusos na Grande São Paulo; demais regiões sob consulta.",
+    "Frete inclusos na Grande São Paulo; demais regiões sob consulta.",
     "Emissão de nota fiscal eletrônica contra o CNPJ do cliente, com impostos inclusos.",
   ]);
 
