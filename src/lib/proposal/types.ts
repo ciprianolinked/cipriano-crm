@@ -16,6 +16,8 @@ export type ProposalItem = {
   scope?: string;
   /** Item calculado automaticamente (ex.: custos indiretos sobre equipamentos). */
   auto?: "indirect";
+  /** Preço de custo unitário antes da margem de segurança (equipamentos). Interno. */
+  basePrice?: number;
 };
 
 export type SectionKind = "text" | "table" | "items" | "totals" | "terms";
@@ -44,6 +46,8 @@ export type ValueBlockConfig = {
   installmentLabel?: string;
   /** Parcelamento sem juros no cartão: 1 a 60 vezes. */
   installments?: number;
+  /** Rótulo do total à vista (ex.: "Total à vista / 1x"). */
+  totalLabel?: string;
   /** Percentual de entrada na assinatura (0 a 100). O restante é pago na entrega técnica. */
   entryPct?: number;
   paymentTitle?: string;

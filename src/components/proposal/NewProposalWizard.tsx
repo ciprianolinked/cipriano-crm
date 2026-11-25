@@ -22,6 +22,8 @@ import { MaintenancePlanFields } from "@/components/proposal/MaintenancePlanFiel
 import { ReferencePanel, type AnalysisContext, type AnalysisResponse } from "@/components/proposal/ReferencePanel";
 import { fetchJson } from "@/lib/api-client";
 import { useLiveList } from "@/lib/use-live-list";
+import { CatalogPicker } from "@/components/proposal/CatalogPicker";
+import { catalogToItem } from "@/lib/proposal/pricing";
 import { comodatoSummary, defaultComodato, DEFAULT_COMODATO_TERM } from "@/lib/proposal/comodato";
 import { MAX_INSTALLMENTS, DEFAULT_INSTALLMENTS, DEFAULT_ENTRY_PCT, clampEntryPct, clampInstallments } from "@/lib/proposal/value-block";
 import type { CompetitorAnalysis } from "@/lib/references-analysis";
@@ -115,9 +117,7 @@ export function NewProposalWizard({
   const [source, setSource] = useState<"briefing" | "matched">("briefing");
 
   // Inserção direta de produtos do catálogo na proposta
-  const [catalogPick, setCatalogPick] = useState("");
-  const [catalogQty, setCatalogQty] = useState(1);
-  const [catalogFilter, setCatalogFilter] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedCatalogItems, setSelectedCatalogItems] = useState<ProposalItem[]>([]);
 
   const maintenance = purpose === "manutencao_mensal";
@@ -181,28 +181,6 @@ export function NewProposalWizard({
       clientEmail: c.email ?? "",
       site: [c.address, [c.city, c.state].filter(Boolean).join("/")].filter(Boolean).join(" — "),
     });
-  }
-
-  function addCatalogItem() {
-    const item = catalog.find((c) => c.id === catalogPick);
-    if (!item) return;
-    const qty = Math.max(1, catalogQty || 1);
-    setSelectedCatalogItems((prev) => [
-      ...prev,
-      {
-        id: uid(),
-        kind: item.kind === "servico" ? "servico" : "equipamento",
-        desc: item.description,
-        spec: item.spec ?? `Categoria: ${item.category}`,
-        unit: item.unit,
-        qty,
-        price: item.priceCents / 100,
-        scope: item.category,
-      },
-    ]);
-    setCatalogPick("");
-    setCatalogQty(1);
-    invalidate();
   }
 
   function removeCatalogItem(id: string) {
@@ -283,16 +261,6 @@ export function NewProposalWizard({
 
   const monthly = preview ? maintenanceSummary(preview.draft.items, preview.draft.discountPct, preview.draft.briefing) : null;
   const comodatoInfo = comodatoSummary(comodato, preview?.draft.items ?? []);
-
-  const filteredCatalog = catalog.filter((c) => {
-    if (!catalogFilter.trim()) return true;
-    const term = catalogFilter.toLowerCase();
-    return (
-      c.description.toLowerCase().includes(term) ||
-      c.category.toLowerCase().includes(term) ||
-      (c.spec ?? "").toLowerCase().includes(term)
-    );
-  });
 
   return (
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -434,60 +402,50 @@ export function NewProposalWizard({
           ) : (
             <div className="space-y-4">
               {/* PRODUTOS DO CATÁLOGO */}
-              {catalog.length > 0 ? (
-                <div className="rounded-xl border border-signal/30 bg-signal/[0.04] p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <div className="label-mono text-signal">Inserir produtos do catálogo</div>
-                      <div className="text-[12px] font-medium text-silver">Adicione itens específicos do catálogo na proposta</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {selectedCatalogItems.length > 0 ? (
-                        <span className="chip !border-signal/50 !text-signal">{selectedCatalogItems.length} item(ns) incluído(s)</span>
-                      ) : null}
-                      <button type="button" className="btn px-2 py-1 text-[10.5px]" onClick={() => void catalogLive.refresh()}>
-                        <RefreshCw size={11} className={catalogLive.refreshing ? "animate-spin" : ""} /> Atualizar
-                      </button>
-                    </div>
+              <div className="rounded-xl border border-signal/30 bg-signal/[0.04] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="label-mono text-signal">Produtos e serviços</div>
+                    <div className="text-[12px] font-medium text-silver">Inclua itens do catálogo na proposta</div>
                   </div>
-
-                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_2fr_100px_auto]">
-                    <input className="field text-[11px]" placeholder="Filtrar catálogo…" value={catalogFilter} onChange={(e) => setCatalogFilter(e.target.value)} />
-                    <select className="field text-[11.5px]" value={catalogPick} onChange={(e) => setCatalogPick(e.target.value)}>
-                      <option value="">Selecione um produto do catálogo…</option>
-                      {filteredCatalog.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          [{c.category}] {c.description} — {brl(c.priceCents / 100)}/{c.unit}
-                        </option>
-                      ))}
-                    </select>
-                    <input type="number" min={1} className="field text-[11px]" value={catalogQty} onChange={(e) => setCatalogQty(Number(e.target.value) || 1)} placeholder="Qtd" />
-                    <button type="button" className="btn btn-primary px-3 text-[11.5px]" onClick={addCatalogItem} disabled={!catalogPick}>
-                      <Plus size={14} /> Incluir
+                  <div className="flex items-center gap-2">
+                    {selectedCatalogItems.length > 0 ? (
+                      <span className="chip !border-signal/50 !text-signal">{selectedCatalogItems.length} item(ns) incluído(s)</span>
+                    ) : null}
+                    <button type="button" className="btn btn-primary px-3 py-1.5 text-[11.5px]" onClick={() => setPickerOpen(true)} disabled={catalog.length === 0}>
+                      <Plus size={13} /> Abrir catálogo
                     </button>
                   </div>
-
-                  {selectedCatalogItems.length > 0 ? (
-                    <div className="mt-3 space-y-1.5 border-t border-line/40 pt-2.5">
-                      <div className="label-mono text-[9px]">Itens do catálogo adicionados:</div>
-                      {selectedCatalogItems.map((item) => (
-                        <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line/50 bg-abyss2/50 px-2.5 py-1.5 text-[11px]">
-                          <span className="text-silver">
-                            <b className="font-mono text-signal">{item.qty} {item.unit}</b> · {item.desc}
-                            {item.spec ? <span className="text-steel"> ({item.spec})</span> : null}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-[10.5px] text-signal">{brl(item.price * item.qty)}</span>
-                            <button type="button" onClick={() => removeCatalogItem(item.id)} className="text-steel hover:text-alarm" title="Remover item">
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
-              ) : null}
+                {selectedCatalogItems.length > 0 ? (
+                  <div className="mt-3 space-y-1.5 border-t border-line/40 pt-2.5">
+                    {selectedCatalogItems.map((item) => (
+                      <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line/50 bg-abyss2/50 px-2.5 py-1.5 text-[11.5px]">
+                        <span className="text-silver">
+                          <b className="font-mono text-signal">{item.qty} {item.unit}</b> · {item.desc}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[10.5px] text-signal">{brl((item.price * item.qty))}</span>
+                          <button type="button" onClick={() => removeCatalogItem(item.id)} className="text-steel hover:text-alarm" title="Remover item">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-[11px] text-steel">Nenhum produto incluído ainda. Use “Abrir catálogo” para escolher os itens.</p>
+                )}
+              </div>
+              <CatalogPicker
+                open={pickerOpen}
+                onClose={() => setPickerOpen(false)}
+                entries={catalog}
+                onAdd={(entry, qty) => {
+                  setSelectedCatalogItems((prev) => [...prev, catalogToItem(entry, qty)]);
+                  invalidate();
+                }}
+              />
 
               {/* CONDIÇÕES COMERCIAIS */}
               <div className="rounded-xl border border-line/60 bg-abyss2/40 p-4">
@@ -519,7 +477,7 @@ export function NewProposalWizard({
                   <Field label="Infraestrutura (%)">
                     <input type="number" min={0} max={100} className="field" value={briefing.infraPct ?? 10} onChange={(e) => updateBriefing({ infraPct: Number(e.target.value) })} />
                   </Field>
-                  <Field label="Margem de segurança (%)">
+                  <Field label="Margem de segurança (%) · compõe o valor">
                     <input type="number" min={0} max={100} className="field" value={briefing.marginPct ?? 5} onChange={(e) => updateBriefing({ marginPct: Number(e.target.value) })} />
                   </Field>
                   <Field label="Mão de obra (R$)">

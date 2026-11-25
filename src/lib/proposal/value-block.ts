@@ -3,7 +3,7 @@ import type { ValueBlockConfig } from "@/lib/proposal/types";
 
 export const MIN_INSTALLMENTS = 1;
 export const MAX_INSTALLMENTS = 60;
-export const DEFAULT_INSTALLMENTS = 12;
+export const DEFAULT_INSTALLMENTS = 3;
 export const DEFAULT_ENTRY_PCT = 40;
 
 export function clampInstallments(value: unknown): number {
@@ -26,6 +26,7 @@ export type ResolvedValueBlock = {
   subtotalLabel: string;
   discountLabel: string;
   installmentLabel: string;
+  totalLabel: string;
   paymentTitle: string;
   entryLabel: string;
   balanceLabel: string;
@@ -70,7 +71,6 @@ export function paymentRows(
   totalCents: number,
 ): [string, string][] {
   const entry = clampEntryPct(block.entryPct);
-  const n = clampInstallments(block.installments);
   const rows: [string, string][] = [];
   const entryCents = Math.round((totalCents * entry) / 100);
   if (entry >= 100) {
@@ -80,12 +80,6 @@ export function paymentRows(
   } else {
     rows.push([`${block.entryLabel} · ${entry}%`, `${brl(entryCents / 100)} na assinatura`]);
     rows.push([`${block.balanceLabel} · ${100 - entry}%`, `${brl((totalCents - entryCents) / 100)} na entrega técnica`]);
-  }
-  if (n === 1) {
-    rows.push([block.cardLabel, `à vista · ${brl(totalCents / 100)}`]);
-  } else {
-    const perInstallment = Math.round(totalCents / n);
-    rows.push([block.cardLabel, `${n}× de ${brl(perInstallment / 100)} sem juros`]);
   }
   return rows;
 }
@@ -113,7 +107,8 @@ export function resolveValueBlock(input: {
     resumoLabel: text(raw.resumoLabel, "Resumo"),
     subtotalLabel: text(raw.subtotalLabel, "Subtotal"),
     discountLabel: text(raw.discountLabel, "Desconto"),
-    installmentLabel: text(raw.installmentLabel, input.maintenance ? "Total do período" : "de"),
+    installmentLabel: text(raw.installmentLabel, "sem juros"),
+    totalLabel: text(raw.totalLabel, input.maintenance ? "Total do período" : "Total à vista / 1x"),
     paymentTitle: text(raw.paymentTitle, "Condições de pagamento"),
     entryLabel: text(raw.entryLabel, "Entrada"),
     balanceLabel: text(raw.balanceLabel, "Saldo"),

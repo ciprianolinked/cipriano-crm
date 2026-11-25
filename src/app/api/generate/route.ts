@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { analyzeBriefingNotes, buildInsights, maybePolishWithLLM } from "@/lib/ai";
 import { getSettings } from "@/lib/data";
 import { calcTotals, defaultBriefing } from "@/lib/proposal/catalog";
-import { generateProposal, indirectCostItems } from "@/lib/proposal/generate";
+import { generateProposal } from "@/lib/proposal/generate";
+import { finalizeItems, pricingFrom } from "@/lib/proposal/pricing";
 import { validateMaintenancePlan } from "@/lib/proposal/maintenance-plan";
 import { applyComodato } from "@/lib/proposal/comodato";
 import { clampEntryPct, clampInstallments, paymentTermsText } from "@/lib/proposal/value-block";
@@ -53,11 +54,9 @@ export async function POST(request: Request) {
   const artIncluded = maintenance ? false : (body.artIncluded ?? type === "completa");
   const customItems = Array.isArray(body.customItems) ? body.customItems : [];
 
-  // Custos indiretos são calculados depois, sobre todos os equipamentos (inclusive os do catálogo).
-  const baseBriefing: Briefing = maintenance ? briefing : { ...briefing, miscPct: 0, infraPct: 0, marginPct: 0 };
   const draft = generateProposal({
     type,
-    briefing: baseBriefing,
+    briefing,
     clientName: String(body.clientName).trim(),
     contact: body.contact ?? "",
     clientEmail: body.clientEmail ?? "",
@@ -69,8 +68,8 @@ export async function POST(request: Request) {
   draft.briefing = briefing;
 
   if (!maintenance) {
-    const indirect = indirectCostItems([...customItems, ...draft.items], briefing);
-    draft.items = [...customItems, ...draft.items, ...indirect];
+    // Margin composes the unit prices; miscellaneous/infrastructure lines are rebuilt from the base value.
+    draft.items = finalizeItems([...customItems, ...draft.items], pricingFrom(briefing));
     if (briefing.comodato?.enabled) {
       draft.sections = applyComodato(draft.sections, {
         config: briefing.comodato,

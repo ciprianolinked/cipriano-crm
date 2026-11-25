@@ -193,7 +193,7 @@ export const catalogSeed: CatalogSeed[] = [
 
 export const roundCents = (reais: number) => Math.round(reais * 100);
 
-export function calcTotals(items: ProposalItem[], discountPct: number, installments = 12): Totals {
+export function calcTotals(items: ProposalItem[], discountPct: number, installments = 3): Totals {
   const safeInstallments = Math.min(60, Math.max(1, Math.round(installments) || 12));
   const subtotalCents = items.reduce((acc, item) => acc + roundCents(item.price) * Math.max(0, item.qty), 0);
   const offCents = Math.round((subtotalCents * Math.min(100, Math.max(0, discountPct))) / 100);

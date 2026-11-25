@@ -15,6 +15,7 @@ export function PrintActions({ filename, doc, settings }: { filename: string; do
       const [{ jsPDF }, pdfKit] = await Promise.all([import("jspdf"), import("@/lib/pdf-documents")]);
       const logo = await pdfKit.loadBrandLogo();
       const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+      await pdfKit.loadDocumentFonts(pdf);
       pdfKit.renderProposalPdf(pdf, doc, settings, logo);
       pdf.save(`${filename}.pdf`);
     } catch (err) {

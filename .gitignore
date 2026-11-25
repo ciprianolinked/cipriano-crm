@@ -23,3 +23,6 @@ coverage/
 playwright-report/
 test-results/
 public/downloads/
+
+# Local visual verification output
+.verification/

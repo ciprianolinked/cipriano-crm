@@ -144,6 +144,7 @@ export function DeliveryTermEditor({
       const [{ jsPDF }, pdfKit] = await Promise.all([import("jspdf"), import("@/lib/pdf-documents")]);
       const logo = await pdfKit.loadBrandLogo();
       const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+      await pdfKit.loadDocumentFonts(pdf);
       pdfKit.renderDeliveryTermPdf(pdf, term, settings, logo);
       pdf.save(`${term.termNumber}-${term.clientName.replace(/\s+/g, "-")}.pdf`);
     } catch (err) {

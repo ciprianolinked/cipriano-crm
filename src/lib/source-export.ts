@@ -12,7 +12,7 @@ const ROOT_FILES = [
   "next-env.d.ts", "next.config.ts", "tsconfig.json", "postcss.config.mjs",
   "eslint.config.mjs", "drizzle.config.ts",
 ];
-const SOURCE_DIRS = ["src", "public", "drizzle"];
+const SOURCE_DIRS = ["src", "public", "drizzle", "tests"];
 const ALLOWED_EXTENSIONS = new Set([".ts", ".tsx", ".css", ".svg", ".sql", ".json", ".mjs", ".md", ".txt", ".png", ".jpg", ".jpeg", ".webp", ".ico"]);
 const BLOCKED_SEGMENTS = new Set(["node_modules", ".next", ".git", ".vercel", ".turbo", "coverage", "dist", "out", "downloads", "test-results", "playwright-report"]);
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
@@ -50,7 +50,7 @@ function allowed(relativePath: string): boolean {
   if (ROOT_FILES.includes(relativePath)) return true;
   if (!SOURCE_DIRS.includes(parts[0])) return false;
   if (parts[0] === "drizzle") return [".sql", ".json"].includes(extname(name));
-  if (parts[0] === "public") return [".svg", ".sql", ".png", ".jpg", ".jpeg", ".webp", ".ico", ".txt"].includes(extname(name));
+  if (parts[0] === "public") return [".svg", ".sql", ".png", ".jpg", ".jpeg", ".webp", ".ico", ".txt", ".ttf", ".woff2"].includes(extname(name));
   return ALLOWED_EXTENSIONS.has(extname(name));
 }
 

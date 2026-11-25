@@ -219,7 +219,7 @@ export function buildBudgetDraft(os: ServiceOrderForBudget, settings: BudgetSett
     discountPct: 0,
     items,
     sections,
-    paymentTerms: paymentTermsText(40, 12),
+    paymentTerms: paymentTermsText(40, 3),
     deliveryTime: settings.defaultDeliveryTime,
     warranty: settings.defaultWarranty,
     artIncluded: false,
@@ -230,7 +230,7 @@ export function buildBudgetDraft(os: ServiceOrderForBudget, settings: BudgetSett
       notes: `Orçamento gerado pela OS ${os.number}.`,
       osId: os.id,
       osNumber: os.number,
-      valueBlock: { installments: 12, entryPct: 40 },
+      valueBlock: { installments: 3, entryPct: 40 },
     } as ProposalDraft["briefing"],
   };
 }

@@ -2,8 +2,9 @@ import type { NextConfig } from "next";
 
 const publishingFiles = [
   "./src/**/*.{ts,tsx,css,svg,json,md,txt}",
-  "./public/*.{svg,sql,png,jpg,jpeg,webp,ico,txt}",
+  "./public/**/*.{svg,sql,png,jpg,jpeg,webp,ico,txt,ttf,woff2}",
   "./drizzle/**/*.{sql,json}",
+  "./tests/**/*.{ts,mjs}",
   "./.gitignore", "./.env.example", "./README.md",
   "./package.json", "./package-lock.json", "./next-env.d.ts",
   "./next.config.ts", "./tsconfig.json", "./postcss.config.mjs",

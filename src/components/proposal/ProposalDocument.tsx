@@ -56,6 +56,8 @@ export type DocEdit = {
   value: (patch: Partial<ValueBlockConfig>) => void;
   item: (id: string, patch: Partial<ProposalItem>) => void;
   briefing: (patch: Record<string, unknown>) => void;
+  addRow: (sectionId: string) => void;
+  removeRow: (sectionId: string, index: number) => void;
 };
 
 function Body({ text }: { text: string }) {
@@ -452,19 +454,16 @@ export function ProposalDocument({
 
             {section.kind === "table" && section.rows ? (
               <>
-                <InlineArea
-                  editable={editable}
-                  value={section.body}
-                  onChange={edit && ((v) => edit.section(section.id, { body: v }))}
-                >
+                <InlineArea editable={editable} value={section.body} onChange={edit && ((v) => edit.section(section.id, { body: v }))}>
                   <Body text={section.body} />
                 </InlineArea>
                 <table className="cip-table" style={{ marginTop: 4 }}>
                   <thead>
                     <tr>
-                      <th style={{ width: "38%" }}>{section.columns?.[0] ?? "Frente de trabalho"}</th>
-                      <th style={{ width: "40%" }}>{section.columns?.[1] ?? "Cipriano Tech & Security"}</th>
+                      <th style={{ width: "36%" }}>{section.columns?.[0] ?? "Frente de trabalho"}</th>
+                      <th style={{ width: "38%" }}>{section.columns?.[1] ?? "Cipriano Tech & Security"}</th>
                       <th>{section.columns?.[2] ?? "Cliente"}</th>
+                      {editable ? <th className="cip-edit-control" style={{ width: 34 }} /> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -479,10 +478,22 @@ export function ProposalDocument({
                         <td>
                           <InlineText editable={editable} value={row.client} onChange={edit && ((v) => edit.row(section.id, i, { client: v }))} />
                         </td>
+                        {editable ? (
+                          <td className="cip-edit-control" style={{ textAlign: "center" }}>
+                            <button type="button" className="cip-mini-remove" title="Remover linha da matriz" onClick={() => edit?.removeRow(section.id, i)}>
+                              remover
+                            </button>
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                {editable ? (
+                  <button type="button" className="cip-add-row cip-edit-control" onClick={() => edit?.addRow(section.id)}>
+                    + adicionar linha à matriz
+                  </button>
+                ) : null}
               </>
             ) : section.kind === "terms" ? (
               <ConditionsBlock section={section} proposal={proposal} maintenance={maintenance} edit={edit} />
@@ -501,215 +512,122 @@ export function ProposalDocument({
 
             {section.kind === "totals" ? (
               <>
-                <div className="cip-totals">
-                  <div>
+                <section className="cip-sum">
+                  <div className="cip-sum-hero">
                     <InlineText
                       editable={editable}
-                      className="cip-t-label"
+                      className="cip-sum-kicker"
                       value={valueBlock.primaryLabel}
                       onChange={setValue && ((v) => setValue({ primaryLabel: v }))}
                     />
-                    <div className="cip-t-big">
-                      {brl((maintenance ? monthly.monthlyCents : totals.totalCents) / 100)}
-                      {maintenance ? " / mês" : ""}
-                    </div>
+                    <div className="cip-sum-big">{brl((maintenance ? monthly.monthlyCents : totals.totalCents) / 100)}{maintenance ? " / mês" : ""}</div>
                     <InlineText
                       editable={editable}
-                      className="cip-t-sub"
+                      className="cip-sum-note"
                       value={valueBlock.primaryNote}
                       onChange={setValue && ((v) => setValue({ primaryNote: v }))}
                     />
                   </div>
-                  <div>
-                    <InlineText
-                      editable={editable}
-                      className="cip-t-label"
-                      value={valueBlock.resumoLabel}
-                      onChange={setValue && ((v) => setValue({ resumoLabel: v }))}
-                    />
-                    <div className="cip-mini">
+                  <div className="cip-sum-rows">
+                    <div className="cip-sum-row">
                       <span>
-                        <InlineText
-                          editable={editable}
-                          value={valueBlock.subtotalLabel}
-                          onChange={setValue && ((v) => setValue({ subtotalLabel: v }))}
-                        />
+                        <InlineText editable={editable} value={valueBlock.subtotalLabel} onChange={setValue && ((v) => setValue({ subtotalLabel: v }))} />
                       </span>
-                      <span>{brl(totals.subtotalCents / 100)}</span>
+                      <b>{brl(totals.subtotalCents / 100)}</b>
                     </div>
-                    <div className="cip-mini">
+                    <div className="cip-sum-row">
+                      <span className="cip-sum-inline">
+                        <InlineText editable={editable} value={valueBlock.discountLabel} onChange={setValue && ((v) => setValue({ discountLabel: v }))} />
+                        <span>(</span>
+                        <InlineNumber editable={editable} value={proposal.discountPct} min={0} max={100} suffix="%" onChange={edit && ((v) => edit.proposal({ discountPct: Math.round(v) }))} />
+                        <span>)</span>
+                      </span>
+                      <b>− {brl(totals.offCents / 100)}</b>
+                    </div>
+                    <div className="cip-sum-row cip-sum-total">
                       <span>
-                        <InlineText
-                          editable={editable}
-                          value={valueBlock.discountLabel}
-                          onChange={setValue && ((v) => setValue({ discountLabel: v }))}
-                        />
+                        <InlineText editable={editable} value={valueBlock.totalLabel} onChange={setValue && ((v) => setValue({ totalLabel: v }))} />
                       </span>
-                      <span>− {brl(totals.offCents / 100)}</span>
+                      <b>{brl(totals.totalCents / 100)}</b>
                     </div>
-                    <div className="cip-mini">
-                      <span className="cip-inline-row">
-                        {maintenance ? (
-                          <InlineText
+                    {!maintenance ? (
+                      <div className="cip-sum-row">
+                        <span className="cip-sum-inline">
+                          <InlineNumber
                             editable={editable}
-                            value={valueBlock.installmentLabel}
-                            onChange={setValue && ((v) => setValue({ installmentLabel: v }))}
+                            value={installments}
+                            min={1}
+                            max={MAX_INSTALLMENTS}
+                            suffix="×"
+                            onChange={setValue && ((v) => setValue({ installments: Math.round(v) }))}
                           />
-                        ) : (
-                          <>
-                            <InlineNumber
-                              editable={editable}
-                              value={installments}
-                              min={1}
-                              max={MAX_INSTALLMENTS}
-                              suffix="×"
-                              onChange={setValue && ((v) => setValue({ installments: Math.round(v) }))}
-                            />
-                            <InlineText
-                              editable={editable}
-                              value={valueBlock.installmentLabel}
-                              onChange={setValue && ((v) => setValue({ installmentLabel: v }))}
-                            />
-                          </>
-                        )}
-                      </span>
-                      <span>{brl((maintenance ? totals.totalCents : totals.installmentCents) / 100)}</span>
-                    </div>
+                          <InlineText editable={editable} value={valueBlock.installmentLabel} onChange={setValue && ((v) => setValue({ installmentLabel: v }))} />
+                        </span>
+                        <b>{brl(totals.installmentCents / 100)}</b>
+                      </div>
+                    ) : null}
                   </div>
-                </div>
+                </section>
 
                 {!maintenance ? (
                   <div className="cip-terms cip-pay">
                     <div className="cip-group">
-                      <InlineText
-                        editable={editable}
-                        value={valueBlock.paymentTitle}
-                        onChange={setValue && ((v) => setValue({ paymentTitle: v }))}
-                      />
+                      <InlineText editable={editable} value={valueBlock.paymentTitle} onChange={setValue && ((v) => setValue({ paymentTitle: v }))} />
                     </div>
                     {entry > 0 ? (
                       <div className="cip-term-row">
-                        <b className="cip-inline-row">
-                          <InlineText
-                            editable={editable}
-                            value={valueBlock.entryLabel}
-                            onChange={setValue && ((v) => setValue({ entryLabel: v }))}
-                          />
-                          <InlineNumber
-                            editable={editable}
-                            value={entry}
-                            min={0}
-                            max={100}
-                            suffix="%"
-                            onChange={setValue && ((v) => setValue({ entryPct: Math.round(v) }))}
-                          />
+                        <b>
+                          <InlineText editable={editable} value={valueBlock.entryLabel} onChange={setValue && ((v) => setValue({ entryLabel: v }))} />
+                          {" · "}
+                          <InlineNumber editable={editable} value={entry} min={0} max={100} suffix="%" onChange={setValue && ((v) => setValue({ entryPct: Math.round(v) }))} />
                         </b>
                         <span>{brl(entryCents / 100)} na assinatura</span>
                       </div>
                     ) : null}
                     {entry < 100 ? (
                       <div className="cip-term-row">
-                        <b className="cip-inline-row">
-                          <InlineText
-                            editable={editable}
-                            value={valueBlock.balanceLabel}
-                            onChange={setValue && ((v) => setValue({ balanceLabel: v }))}
-                          />
-                          <span>{100 - entry}%</span>
+                        <b>
+                          <InlineText editable={editable} value={valueBlock.balanceLabel} onChange={setValue && ((v) => setValue({ balanceLabel: v }))} />
+                          {" · "}
+                          {100 - entry}%
                         </b>
                         <span>{brl((total - entryCents) / 100)} na entrega técnica</span>
                       </div>
                     ) : null}
-                    <div className="cip-term-row">
-                      <b>
-                        <InlineText
-                          editable={editable}
-                          value={valueBlock.cardLabel}
-                          onChange={setValue && ((v) => setValue({ cardLabel: v }))}
-                        />
-                      </b>
-                      <span>
-                        {installments === 1
-                          ? `à vista · ${brl(total / 100)}`
-                          : `${installments}× de ${brl(perInstallment / 100)} sem juros`}
-                      </span>
-                    </div>
                   </div>
                 ) : null}
 
                 <div className="cip-mini-grid">
                   <div className="cip-mini">
                     <span>
-                      <InlineText
-                        editable={editable}
-                        value={valueBlock.paymentLabel}
-                        onChange={setValue && ((v) => setValue({ paymentLabel: v }))}
-                      />
+                      <InlineText editable={editable} value={valueBlock.paymentLabel} onChange={setValue && ((v) => setValue({ paymentLabel: v }))} />
                     </span>
                     <span>
-                      <InlineText
-                        editable={editable}
-                        align="right"
-                        value={proposal.paymentTerms ?? ""}
-                        placeholder="A combinar"
-                        onChange={edit && ((v) => edit.proposal({ paymentTerms: v }))}
-                      />
+                      <InlineText editable={editable} align="right" value={proposal.paymentTerms ?? ""} placeholder="A combinar" onChange={edit && ((v) => edit.proposal({ paymentTerms: v }))} />
                     </span>
                   </div>
                   <div className="cip-mini">
                     <span>
-                      <InlineText
-                        editable={editable}
-                        value={valueBlock.deadlineLabel}
-                        onChange={setValue && ((v) => setValue({ deadlineLabel: v }))}
-                      />
+                      <InlineText editable={editable} value={valueBlock.deadlineLabel} onChange={setValue && ((v) => setValue({ deadlineLabel: v }))} />
                     </span>
                     <span>
-                      <InlineText
-                        editable={editable}
-                        align="right"
-                        value={proposal.deliveryTime ?? ""}
-                        placeholder="A combinar"
-                        onChange={edit && ((v) => edit.proposal({ deliveryTime: v }))}
-                      />
+                      <InlineText editable={editable} align="right" value={proposal.deliveryTime ?? ""} placeholder="A combinar" onChange={edit && ((v) => edit.proposal({ deliveryTime: v }))} />
                     </span>
                   </div>
                   <div className="cip-mini">
                     <span>
-                      <InlineText
-                        editable={editable}
-                        value={valueBlock.warrantyLabel}
-                        onChange={setValue && ((v) => setValue({ warrantyLabel: v }))}
-                      />
+                      <InlineText editable={editable} value={valueBlock.warrantyLabel} onChange={setValue && ((v) => setValue({ warrantyLabel: v }))} />
                     </span>
                     <span>
-                      <InlineText
-                        editable={editable}
-                        align="right"
-                        value={proposal.warranty ?? ""}
-                        placeholder="A combinar"
-                        onChange={edit && ((v) => edit.proposal({ warranty: v }))}
-                      />
+                      <InlineText editable={editable} align="right" value={proposal.warranty ?? ""} placeholder="A combinar" onChange={edit && ((v) => edit.proposal({ warranty: v }))} />
                     </span>
                   </div>
                   <div className="cip-mini">
                     <span>
-                      <InlineText
-                        editable={editable}
-                        value={valueBlock.validityLabel}
-                        onChange={setValue && ((v) => setValue({ validityLabel: v }))}
-                      />
+                      <InlineText editable={editable} value={valueBlock.validityLabel} onChange={setValue && ((v) => setValue({ validityLabel: v }))} />
                     </span>
                     <span className="cip-inline-row">
-                      <InlineNumber
-                        editable={editable}
-                        value={proposal.validityDays}
-                        min={1}
-                        max={365}
-                        suffix=" dias"
-                        align="right"
-                        onChange={edit && ((v) => edit.proposal({ validityDays: Math.round(v) }))}
-                      />
+                      <InlineNumber editable={editable} value={proposal.validityDays} min={1} max={365} suffix=" dias" align="right" onChange={edit && ((v) => edit.proposal({ validityDays: Math.round(v) }))} />
                     </span>
                   </div>
                 </div>

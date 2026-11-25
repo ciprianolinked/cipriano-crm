@@ -1,0 +1,37 @@
+/* Self-hosted fonts: the same cuts are embedded in every downloaded PDF. */
+@font-face {
+  font-family: "Cipriano Sans";
+  src: url("/fonts/IBMPlexSans-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cipriano Sans";
+  src: url("/fonts/IBMPlexSans-SemiBold.ttf") format("truetype");
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cipriano Mono";
+  src: url("/fonts/IBMPlexMono-SemiBold.ttf") format("truetype");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cipriano Display";
+  src: url("/fonts/SpaceGrotesk-Bold.ttf") format("truetype");
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+:root {
+  --doc-sans: "Cipriano Sans", "IBM Plex Sans", Arial, sans-serif;
+  --doc-mono: "Cipriano Mono", "IBM Plex Mono", monospace;
+  --doc-display: "Cipriano Display", "Space Grotesk", Arial, sans-serif;
+  --doc-ink: #111827;
+  --doc-label: #243244;
+  --doc-accent: #005e70;
+}

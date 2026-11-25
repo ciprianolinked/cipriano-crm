@@ -1,11 +1,13 @@
 import type { jsPDF } from "jspdf";
+import { PDF_FONTS } from "@/lib/pdf-fonts";
+export { loadDocumentFonts } from "@/lib/pdf-fonts";
 import { brl, fmtDate } from "@/lib/brand";
 import { calcTotals, typeLabels } from "@/lib/proposal/catalog";
 import { paymentRows, resolveValueBlock } from "@/lib/proposal/value-block";
 import { isMaintenanceProposal, maintenanceSummary } from "@/lib/proposal/maintenance-plan";
 import type { ProposalItem, ProposalSection, ProposalType } from "@/lib/proposal/types";
 
-/** Normaliza para NFC e troca apenas glifos fora do conjunto das fontes padrão do PDF. */
+/** Normalização textual comum; as fontes IBM Plex são incorporadas antes da renderização. */
 export const pdfSafe = (value: string) =>
   String(value ?? "")
     .normalize("NFC")
@@ -73,13 +75,13 @@ const FOOTER_TOP = H - 22; // 275 mm: início da faixa do rodapé
 type RGB = [number, number, number];
 const C = {
   navy: [10, 25, 47] as RGB,
-  ink: [51, 70, 94] as RGB,
+  ink: [17, 24, 39] as RGB,
   dark: [10, 25, 47] as RGB,
-  steel: [125, 147, 173] as RGB,
-  silver: [198, 210, 224] as RGB,
+  steel: [36, 50, 68] as RGB,
+  silver: [224, 232, 241] as RGB,
   rule: [220, 228, 238] as RGB,
-  signal: [0, 168, 189] as RGB,
-  pale: [242, 247, 252] as RGB,
+  signal: [0, 94, 112] as RGB,
+  pale: [248, 250, 252] as RGB,
   band: [232, 245, 249] as RGB,
   white: [255, 255, 255] as RGB,
 };
@@ -94,14 +96,17 @@ export type SheetOptions = {
   footerNote: string;
 };
 
-const BODY_SIZE = 9.2;
-const LINE_H = 5.0;
+const BODY_SIZE = 10.5;
+const LINE_H = 5.6;
 
 /** Folha A4: cabeçalho repetido, conteúdo paginado por linha e rodapé com colunas limitadas. */
 export class A4Sheet {
   private y = M.top;
 
   constructor(private pdf: jsPDF, private opts: SheetOptions, private logo: string | null) {
+    if (!pdf.getFontList()[PDF_FONTS.body]) {
+      throw new Error("Carregue as fontes do documento antes de gerar o PDF.");
+    }
     this.paintHeader();
   }
 
@@ -113,32 +118,32 @@ export class A4Sheet {
       try {
         pdf.addImage(this.logo, "PNG", M.left, 7, 54, 13.5);
       } catch {
-        pdf.setFont("helvetica", "bold");
+        pdf.setFont(PDF_FONTS.body, "bold");
         pdf.setFontSize(12);
         pdf.setTextColor(...C.white);
         pdf.text("CIPRIANO TECH & SECURITY", M.left, 14);
       }
     } else {
-      pdf.setFont("helvetica", "bold");
+      pdf.setFont(PDF_FONTS.body, "bold");
       pdf.setFontSize(12);
       pdf.setTextColor(...C.white);
       pdf.text("CIPRIANO TECH & SECURITY", M.left, 14);
-      pdf.setFont("helvetica", "normal");
+      pdf.setFont(PDF_FONTS.body, "normal");
       pdf.setFontSize(7);
       pdf.setTextColor(...C.silver);
       pdf.text(text("SEGURANÇA ELETRÔNICA IP"), M.left, 18.6);
     }
     // Bloco direito em caixa alta, com acentuação preservada e espaço para as três linhas de meta.
-    pdf.setFont("helvetica", "bold");
+    pdf.setFont(PDF_FONTS.body, "bold");
     pdf.setFontSize(9.6);
     pdf.setTextColor(...C.white);
     pdf.text(clip(pdf, text(this.opts.label).toUpperCase(), 98), W - M.right, 12.5, { align: "right" });
-    pdf.setFont("helvetica", "normal");
+    pdf.setFont(PDF_FONTS.body, "normal");
     pdf.setFontSize(8.4);
     pdf.setTextColor(...C.silver);
     pdf.text(clip(pdf, this.opts.reference, 98), W - M.right, 16.9, { align: "right" });
-    pdf.setFontSize(7.4);
-    pdf.setTextColor(159, 178, 199);
+    pdf.setFontSize(8);
+    pdf.setTextColor(...C.silver);
     this.opts.meta.slice(0, 3).forEach((line, i) => {
       pdf.text(clip(pdf, line, 98), W - M.right, 21.8 + i * 4.1, { align: "right" });
     });
@@ -169,7 +174,7 @@ export class A4Sheet {
   }
 
   private setBody(size = BODY_SIZE, bold = false, color: RGB = C.ink) {
-    this.pdf.setFont("helvetica", bold ? "bold" : "normal");
+    this.pdf.setFont(PDF_FONTS.body, bold ? "bold" : "normal");
     this.pdf.setFontSize(size);
     this.pdf.setTextColor(...color);
   }
@@ -180,16 +185,18 @@ export class A4Sheet {
     if (this.y > M.top + 1) this.y += 9;
     this.ensure(30);
     const y = this.y;
-    this.setBody(10.6, true, C.dark);
+    this.setBody(11.2, true, C.dark);
+    this.pdf.setFont(PDF_FONTS.display, "bold");
     // Caixa alta como na prévia em tela, preservando acentuação.
     const label = clip(this.pdf, text(title).toUpperCase(), CONTENT - 19);
     this.pdf.setFillColor(...C.band);
     this.pdf.roundedRect(M.left, y - 4.6, 10.4, 6.8, 1, 1, "F");
-    this.pdf.setFont("courier", "bold");
+    this.pdf.setFont(PDF_FONTS.mono, "bold");
     this.pdf.setFontSize(8);
     this.pdf.setTextColor(...C.signal);
     this.pdf.text(text(index), M.left + 5.2, y - 0.3, { align: "center" });
-    this.setBody(10.6, true, C.dark);
+    this.setBody(11.2, true, C.dark);
+    this.pdf.setFont(PDF_FONTS.display, "bold");
     this.pdf.text(label, M.left + 14, y);
     const titleWidth = this.pdf.getTextWidth(label);
     this.pdf.setDrawColor(...C.rule);
@@ -202,7 +209,8 @@ export class A4Sheet {
     if (this.y > M.top + 1) this.y += 7;
     this.ensure(23);
     const y = this.y;
-    this.setBody(9.8, true, C.dark);
+    this.setBody(10.5, true, C.dark);
+    this.pdf.setFont(PDF_FONTS.display, "bold");
     const label = clip(this.pdf, value, CONTENT - 4);
     this.pdf.text(label, M.left, y);
     this.pdf.setDrawColor(...C.rule);
@@ -217,7 +225,7 @@ export class A4Sheet {
     const y = this.y;
     this.pdf.setFillColor(...C.signal);
     this.pdf.rect(M.left, y - 3.4, 1.6, 4.8, "F");
-    this.setBody(9.3, true, C.dark);
+    this.setBody(10.2, true, C.dark);
     this.pdf.text(clip(this.pdf, value, CONTENT - 8), M.left + 4.5, y);
     this.y = y + 6.6;
   }
@@ -293,18 +301,18 @@ export class A4Sheet {
 
     widths.forEach((ratio, i) => {
       const maxWidth = CONTENT * ratio - 9;
-      const size = i === 0 ? 8.6 : 8.2;
+      const size = 9.6;
       const bold = i === 0;
       const color: RGB = i === 0 ? C.dark : C.ink;
       this.setBody(size, bold, color);
       let parts = pdf.splitTextToSize(text(values[i]), maxWidth) as string[];
-      if (parts.length > 2) parts = [parts[0], clip(pdf, parts.slice(1).join(" "), maxWidth - 3)];
+      // Do not truncate the client name or address: grow the strip instead.
       const lines: CellLine[] = parts.map((value) => ({ value, size, bold, color }));
       if (i === 0 && data.email) {
         // Mesma coluna do nome, como na prévia em tela — evita cruzar com o contato.
-        this.setBody(7.8, false, C.steel);
+        this.setBody(9, false, C.steel);
         const emailLines = pdf.splitTextToSize(text(data.email), maxWidth) as string[];
-        emailLines.slice(0, 2).forEach((value) => lines.push({ value, size: 7.8, bold: false, color: C.steel }));
+        emailLines.slice(0, 2).forEach((value) => lines.push({ value, size: 9, bold: false, color: C.steel }));
       }
       columns.push(lines);
     });
@@ -317,8 +325,8 @@ export class A4Sheet {
     pdf.roundedRect(M.left, y, CONTENT, height, 1.2, 1.2, "F");
     let x = M.left + 5;
     widths.forEach((ratio, i) => {
-      pdf.setFont("courier", "normal");
-      pdf.setFontSize(7);
+      pdf.setFont(PDF_FONTS.mono, "bold");
+      pdf.setFontSize(8.6);
       pdf.setTextColor(...C.steel);
       pdf.text(text(labels[i]), x, y + 5.8);
       columns[i].forEach((line, li) => {
@@ -341,147 +349,161 @@ export class A4Sheet {
     footer?: string[],
   ) {
     const pdf = this.pdf;
-    const paintTableHeader = () => {
-      this.ensure(8);
-      const y = this.y;
+    const lineHeight = 5.2;
+    const padding = 2.6;
+    const header = () => {
+      this.setBody(8.4, true, C.dark);
+      const labels = columns.map((col) => pdf.splitTextToSize(text(col.label), col.width - padding * 2) as string[]);
+      const height = Math.max(9, Math.max(...labels.map((l) => l.length)) * 4 + 4);
+      this.ensure(height + lineHeight + padding * 2);
+      const top = this.y;
       pdf.setFillColor(...C.pale);
-      pdf.rect(M.left, y, CONTENT, 7.8, "F");
-      pdf.setFont("courier", "normal");
-      pdf.setFontSize(7);
-      pdf.setTextColor(...C.steel);
+      pdf.rect(M.left, top, CONTENT, height, "F");
       let x = M.left;
-      for (const col of columns) {
+      columns.forEach((col, index) => {
         const align = col.align ?? "left";
-        const cellX = align === "right" ? x + col.width - 2.5 : align === "center" ? x + col.width / 2 : x + 2.5;
-        pdf.text(clip(pdf, col.label.toUpperCase(), col.width - 5), cellX, y + 5.4, { align });
+        const cx = align === "right" ? x + col.width - padding : align === "center" ? x + col.width / 2 : x + padding;
+        this.setBody(8.4, true, C.dark);
+        labels[index].forEach((label, line) => pdf.text(label, cx, top + 5 + line * 4, { align }));
         x += col.width;
-      }
+      });
       pdf.setDrawColor(...C.rule);
-      pdf.setLineWidth(0.3);
-      pdf.line(M.left, y + 7.8, W - M.right, y + 7.8);
-      this.y = y + 7.8;
+      pdf.line(M.left, top + height, W - M.right, top + height);
+      this.y = top + height;
     };
-    const ensureWithHeader = (height: number) => {
-      if (this.y + height > CONTENT_BOTTOM) {
-        this.newPage();
-        paintTableHeader();
-      }
-    };
-    paintTableHeader();
+    header();
     for (const row of rows) {
-      this.setBody(8.3);
-      const wrapped = columns.map((col, i) => pdf.splitTextToSize(text(row[i] ?? ""), col.width - 5) as string[]);
+      this.setBody(9.2);
+      const wrapped = columns.map((col, i) => pdf.splitTextToSize(text(row[i] ?? ""), col.width - padding * 2) as string[]);
       const count = Math.max(1, ...wrapped.map((lines) => lines.length));
-      for (let li = 0; li < count; li++) {
-        ensureWithHeader(LINE_H);
-        const y = this.y;
+      const height = count * lineHeight + padding * 2;
+      // Keep a normal item together; exceptionally long cells continue under a repeated header.
+      if (height < CONTENT_BOTTOM - M.top - 22 && this.y + height > CONTENT_BOTTOM) {
+        this.newPage();
+        header();
+      }
+      this.y += padding;
+      for (let line = 0; line < count; line++) {
+        if (this.y + lineHeight + padding > CONTENT_BOTTOM) {
+          this.newPage();
+          header();
+          this.y += padding;
+        }
         let x = M.left;
         columns.forEach((col, i) => {
           const align = col.align ?? "left";
-          const cellX = align === "right" ? x + col.width - 2.5 : align === "center" ? x + col.width / 2 : x + 2.5;
-          this.setBody(8.3);
-          pdf.text(wrapped[i][li] ?? "", cellX, y + 3.9, { align });
+          const cx = align === "right" ? x + col.width - padding : align === "center" ? x + col.width / 2 : x + padding;
+          this.setBody(9.2);
+          pdf.text(wrapped[i][line] ?? "", cx, this.y + 3.5, { align });
           x += col.width;
         });
-        this.y += 4.4;
+        this.y += lineHeight;
       }
-      ensureWithHeader(3);
-      const bottom = this.y + 2.2;
+      this.y += padding;
       pdf.setDrawColor(...C.rule);
       pdf.setLineWidth(0.25);
-      pdf.line(M.left, bottom, W - M.right, bottom);
-      this.y = bottom + 1.6;
+      pdf.line(M.left, this.y, W - M.right, this.y);
     }
     if (footer) {
-      ensureWithHeader(9);
-      const y = this.y;
+      this.ensure(11);
       pdf.setDrawColor(...C.dark);
-      pdf.setLineWidth(0.5);
-      pdf.line(M.left, y, W - M.right, y);
+      pdf.line(M.left, this.y, W - M.right, this.y);
       let x = M.left;
-      columns.forEach((col, i) => {
+      columns.forEach((col, index) => {
         const align = col.align ?? "left";
-        const cellX = align === "right" ? x + col.width - 2.5 : align === "center" ? x + col.width / 2 : x + 2.5;
-        this.setBody(8.3, true, C.dark);
-        pdf.text(clip(pdf, footer[i] ?? "", col.width - 5), cellX, y + 5.6, { align });
+        const cx = align === "right" ? x + col.width - padding : align === "center" ? x + col.width / 2 : x + padding;
+        this.setBody(9.2, true, C.dark);
+        pdf.text(clip(pdf, footer[index] ?? "", col.width - padding * 2), cx, this.y + 6, { align });
         x += col.width;
       });
-      this.y = y + 9.6;
+      this.y += 11;
     }
+    this.y += 2;
   }
 
   /** Condições comerciais: uma faixa por linha, com altura calculada e sem duplicar o texto. */
   terms(rows: [string, string][]) {
     const pdf = this.pdf;
+    const labelWidth = 47;
+    const valueWidth = CONTENT - 61;
+    const lineHeight = 5.2;
     for (const [label, value] of rows) {
-      this.setBody(8.5);
-      const lines = pdf.splitTextToSize(text(value || "—"), CONTENT - 54) as string[];
-      const height = Math.max(9.6, lines.length * 4.6 + 4.6);
-      this.ensure(height + 2);
-      const y = this.y;
-      pdf.setFillColor(...C.pale);
-      pdf.roundedRect(M.left, y, CONTENT, height, 1, 1, "F");
-      pdf.setFont("courier", "normal");
-      pdf.setFontSize(7);
-      pdf.setTextColor(...C.steel);
-      pdf.text(clip(pdf, label.toUpperCase(), 43), M.left + 4, y + 5.8);
-      this.setBody(8.5);
-      lines.forEach((line, i) => pdf.text(line, M.left + 52, y + 5.8 + i * 4.6));
-      pdf.setDrawColor(...C.rule);
-      pdf.setLineWidth(0.25);
-      pdf.line(M.left, y + height, W - M.right, y + height);
-      this.y = y + height + 2.2;
+      this.setBody(9, true, C.dark);
+      const labels = pdf.splitTextToSize(text(label), labelWidth) as string[];
+      this.setBody(10.2, false, C.ink);
+      const lines = pdf.splitTextToSize(text(value || "—"), valueWidth) as string[];
+      const count = Math.max(1, labels.length, lines.length);
+      let offset = 0;
+      while (offset < count) {
+        const fullHeight = (count - offset) * lineHeight + 7;
+        if (fullHeight < CONTENT_BOTTOM - M.top && this.y + fullHeight > CONTENT_BOTTOM) this.newPage();
+        this.ensure(lineHeight + 7);
+        const capacity = Math.max(1, Math.floor((CONTENT_BOTTOM - this.y - 7) / lineHeight));
+        const shown = Math.min(capacity, count - offset);
+        const height = shown * lineHeight + 7;
+        const top = this.y;
+        pdf.setFillColor(...C.pale);
+        pdf.roundedRect(M.left, top, CONTENT, height, 1, 1, "F");
+        this.setBody(9, true, C.dark);
+        labels.slice(offset, offset + shown).forEach((line, i) => pdf.text(line, M.left + 5, top + 6 + i * lineHeight));
+        this.setBody(10.2, false, C.ink);
+        lines.slice(offset, offset + shown).forEach((line, i) => pdf.text(line, M.left + 56, top + 6 + i * lineHeight));
+        pdf.setDrawColor(...C.rule);
+        pdf.setLineWidth(0.25);
+        pdf.line(M.left, top + height, W - M.right, top + height);
+        this.y = top + height + 2.5;
+        offset += shown;
+        if (offset < count) this.newPage();
+      }
     }
     this.space(3);
   }
 
   totals(data: { primaryLabel: string; primaryValue: string; primaryNote: string; rows: [string, string][] }) {
     const pdf = this.pdf;
-    this.ensure(38);
-    const y = this.y;
+    this.setBody(9);
+    const notes = pdf.splitTextToSize(text(data.primaryNote), 87) as string[];
+    const height = Math.max(40, 28 + notes.length * 4.6, data.rows.length * 11 + 7);
+    this.ensure(height + 5);
+    const top = this.y;
     pdf.setFillColor(...C.navy);
-    pdf.roundedRect(M.left, y, CONTENT, 30, 1.2, 1.2, "F");
-    pdf.setFont("courier", "normal");
-    pdf.setFontSize(5.9);
-    pdf.setTextColor(...C.steel);
-    pdf.text(clip(pdf, data.primaryLabel.toUpperCase(), 92), M.left + 6, y + 7);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(18);
-    pdf.setTextColor(0, 229, 255);
-    pdf.text(clip(pdf, data.primaryValue, 100), M.left + 6, y + 17.5);
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(7.4);
-    pdf.setTextColor(...C.silver);
-    const noteLines = pdf.splitTextToSize(text(data.primaryNote), 96) as string[];
-    noteLines.slice(0, 2).forEach((line, i) => pdf.text(clip(pdf, line, 96), M.left + 6, y + 24 + i * 4));
-    let rowY = y + 8;
+    pdf.roundedRect(M.left, top, CONTENT, height, 1.2, 1.2, "F");
+    this.setBody(9.2, true, C.white);
+    pdf.text(clip(pdf, data.primaryLabel, 87), M.left + 6, top + 7);
+    pdf.setFont(PDF_FONTS.display, "bold");
+    pdf.setFontSize(20);
+    pdf.setTextColor(...C.white);
+    pdf.text(clip(pdf, data.primaryValue, 87), M.left + 6, top + 20);
+    this.setBody(9, false, C.silver);
+    notes.forEach((line, i) => pdf.text(line, M.left + 6, top + 28 + i * 4.6));
+    let rowTop = top + 6;
     for (const [label, value] of data.rows) {
-      pdf.setFont("courier", "normal");
-      pdf.setFontSize(7);
-      pdf.setTextColor(...C.steel);
-      pdf.text(clip(pdf, label.toUpperCase(), 55), M.left + 110, rowY);
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8.8);
-      pdf.setTextColor(...C.white);
-      pdf.text(clip(pdf, value, 62), W - M.right - 6, rowY, { align: "right" });
-      rowY += 7.4;
+      this.setBody(8.6, true, C.silver);
+      pdf.text(clip(pdf, label, 65), M.left + 104, rowTop);
+      this.setBody(10.2, true, C.white);
+      pdf.text(clip(pdf, value, 65), W - M.right - 6, rowTop + 5.4, { align: "right" });
+      rowTop += 11;
     }
-    this.y = y + 34;
+    this.y = top + height + 5;
   }
 
   signatures(left: string, right: string) {
     const pdf = this.pdf;
-    this.ensure(46);
-    const y = this.y + 10;
     const width = (CONTENT - 12) / 2;
+    this.setBody(9, false, C.dark);
+    const leftLines = pdf.splitTextToSize(text(left), width) as string[];
+    const rightLines = pdf.splitTextToSize(text(right), width) as string[];
+    const height = Math.max(leftLines.length, rightLines.length) * 4.6 + 22;
+    this.ensure(height);
+    const top = this.y + 13;
     pdf.setDrawColor(...C.dark);
     pdf.setLineWidth(0.35);
-    pdf.line(M.left, y, M.left + width, y);
-    pdf.line(M.left + width + 12, y, W - M.right, y);
-    this.setBody(8.2, false, C.steel);
-    pdf.text(clip(pdf, left, width), M.left, y + 5.4);
-    pdf.text(clip(pdf, right, width), M.left + width + 12, y + 5.4);
-    this.y = y + 15;
+    pdf.line(M.left, top, M.left + width, top);
+    pdf.line(M.left + width + 12, top, W - M.right, top);
+    this.setBody(9, false, C.dark);
+    leftLines.forEach((line, i) => pdf.text(line, M.left, top + 5.5 + i * 4.6));
+    rightLines.forEach((line, i) => pdf.text(line, M.left + width + 12, top + 5.5 + i * 4.6));
+    this.y += height;
   }
 
   seal(tags: string[]) {
@@ -489,7 +511,7 @@ export class A4Sheet {
     if (this.y > M.top + 1) this.y += 8;
     this.ensure(16);
     const pdf = this.pdf;
-    pdf.setFont("courier", "normal");
+    pdf.setFont(PDF_FONTS.mono, "bold");
     pdf.setFontSize(7);
     pdf.setTextColor(...C.steel);
     pdf.text(clip(pdf, tags.join("  |  "), CONTENT), M.left, this.y);
@@ -522,30 +544,30 @@ export class A4Sheet {
       pdf.line(M.left + 64.5, FOOTER_TOP + 3.5, M.left + 64.5, FOOTER_TOP + 13.5);
       pdf.line(M.left + 132.5, FOOTER_TOP + 3.5, M.left + 132.5, FOOTER_TOP + 13.5);
 
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(7.2);
+      pdf.setFont(PDF_FONTS.body, "bold");
+      pdf.setFontSize(8);
       pdf.setTextColor(...C.dark);
       pdf.text(clip(pdf, this.opts.footerLeft, 62), leftX, row1);
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(6.6);
+      pdf.setFont(PDF_FONTS.body, "normal");
+      pdf.setFontSize(7.5);
       pdf.setTextColor(...C.steel);
       pdf.text(clip(pdf, this.opts.footerLeft2, 62), leftX, row2);
 
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(6.6);
+      pdf.setFont(PDF_FONTS.body, "bold");
+      pdf.setFontSize(7.5);
       pdf.setTextColor(...C.dark);
       pdf.text(clip(pdf, this.opts.footerCenter, 62), centerX, row1);
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(6.6);
+      pdf.setFont(PDF_FONTS.body, "normal");
+      pdf.setFontSize(7.5);
       pdf.setTextColor(...C.steel);
       pdf.text(clip(pdf, this.opts.footerNote, 62), centerX, row2);
 
-      pdf.setFont("courier", "bold");
+      pdf.setFont(PDF_FONTS.mono, "bold");
       pdf.setFontSize(7.6);
       pdf.setTextColor(...C.dark);
       pdf.text(clip(pdf, `PÁGINA ${page} DE ${total}`, 40), rightX, row1, { align: "right" });
-      pdf.setFont("courier", "normal");
-      pdf.setFontSize(6.3);
+      pdf.setFont(PDF_FONTS.mono, "bold");
+      pdf.setFontSize(7.5);
       pdf.setTextColor(...C.steel);
       pdf.text(clip(pdf, "DOC. GERADO ELETRONICAMENTE", 40), rightX, row2, { align: "right" });
     }
@@ -717,11 +739,11 @@ export function renderProposalPdf(pdf: jsPDF, doc: PdfProposalData, settings: Pd
         primaryNote: valueBlock.primaryNote,
         rows: [
           [valueBlock.subtotalLabel, brl(totals.subtotalCents / 100)],
-          [valueBlock.discountLabel, `− ${brl(totals.offCents / 100)}`],
-          [
-            maintenance ? valueBlock.installmentLabel : `${valueBlock.installments}× ${valueBlock.installmentLabel}`,
-            brl((maintenance ? totals.totalCents : totals.installmentCents) / 100),
-          ],
+          [`${valueBlock.discountLabel} (${doc.discountPct}%)`, `− ${brl(totals.offCents / 100)}`],
+          [valueBlock.totalLabel, brl(totals.totalCents / 100)],
+          ...(maintenance
+            ? []
+            : ([[`${valueBlock.installments}× ${valueBlock.installmentLabel}`, brl(totals.installmentCents / 100)]] as [string, string][])),
         ],
       });
       if (!maintenance) {

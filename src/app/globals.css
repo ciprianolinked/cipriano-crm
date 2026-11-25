@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./document-fonts.css";
 
 @theme {
   --color-abyss: #050c18;
@@ -186,7 +187,7 @@
     margin: 0 !important;
     padding-top: 3mm !important;
     background: #fff !important;
-    font-size: 7.6px !important;
+    font-size: 10.5px !important;
   }
   @page {
     size: A4;

@@ -10,8 +10,8 @@
 2. **Executar** em `/os/[id]`: checklist com conferência, laudo técnico, PDF A4 e impressão.
    Datas de início/conclusão acompanham o status.
 3. **Gerar orçamento** quando houver peças cobráveis ou mão de obra:
-   `POST /api/service-orders/[id]/budget` cria uma **proposta comercial** com peças + mão de obra +
-   deslocamento, e grava o vínculo nos dois lados:
+   `POST /api/service-orders/[id]/budget` cria uma **proposta comercial** com peças + mão de obra
+   e grava o vínculo nos dois lados:
    - OS: `budget_proposal_id`, `budget_proposal_number`, `budget_total_cents`, `budget_issued_at`;
    - Proposta: `briefing.osId` e `briefing.osNumber`.
 4. **Corrigir**: o botão “Corrigir orçamento” abre `/propostas/[id]`. Ao salvar a proposta, o

@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, FileDown, FileText, LoaderCircle, Plus, Printer, Sparkles, Unlink, Trash2 } from "lucide-react";
 import { brl, fmtDate } from "@/lib/brand";
 import { fetchJson } from "@/lib/api-client";
+import { mergeOsRewrite, OS_TEXT_LABELS, pickOsTexts, readOsTexts, type OsRewriteResponse, type OsTextChange } from "@/lib/os-rewrite";
 import { OS_KINDS, OS_PRIORITIES, OS_STATUSES, osStatus, soPartsCents } from "@/lib/service-orders";
 import type { ServiceOrderItem } from "@/db/schema";
 import {
@@ -44,6 +45,13 @@ export function ServiceOrderEditor({
   const [proposalsBusy, setProposalsBusy] = useState(false);
   const [originSelection, setOriginSelection] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
+  const [aiChanges, setAiChanges] = useState<OsTextChange[]>([]);
+  const [aiFeedback, setAiFeedback] = useState("");
+  const [aiError, setAiError] = useState("");
+  const currentOs = useRef(os);
+  currentOs.current = os;
+  const aiRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => aiRequest.current?.abort(), []);
 
   const loadProposals = useCallback(async () => {
     try {
@@ -75,7 +83,6 @@ export function ServiceOrderEditor({
       });
       setOs((prev) => ({
         ...prev,
-        ...data.serviceOrder,
         originProposalId: data.serviceOrder.originProposalId,
         originProposalNumber: data.serviceOrder.originProposalNumber,
       }));
@@ -90,30 +97,62 @@ export function ServiceOrderEditor({
   }
 
   async function rewriteWithAI() {
-    if (aiBusy) return;
+    if (aiRequest.current) return;
+    const submitted = pickOsTexts(currentOs.current);
+    if (!Object.values(submitted).some((value) => value.trim())) {
+      setAiError("Escreva a solicitação, o diagnóstico ou a solução antes de pedir a revisão.");
+      return;
+    }
+    const controller = new AbortController();
+    aiRequest.current = controller;
     setAiBusy(true);
     setError("");
     setNotice("");
+    setAiFeedback("");
+    setAiError("");
+    setAiChanges([]);
     try {
-      const data = await fetchJson<{ blocks: Partial<Pick<EditableOs, "description" | "diagnosis" | "solution" | "notes">>; message: string }>(
-        `/api/service-orders/${os.id}/rewrite`,
-        { method: "POST" },
-      );
-      setOs((prev) => ({
-        ...prev,
-        description: data.blocks.description ?? prev.description,
-        diagnosis: data.blocks.diagnosis ?? prev.diagnosis,
-        solution: data.blocks.solution ?? prev.solution,
-        notes: data.blocks.notes ?? prev.notes,
-      }));
-      setDirty(true);
-      setNotice(data.message);
+      const data = await fetchJson<OsRewriteResponse>(`/api/service-orders/${os.id}/rewrite`, {
+        method: "POST",
+        signal: controller.signal,
+        body: JSON.stringify({ blocks: submitted, context: { kind: os.kind, status: os.status } }),
+      });
+      const validated = readOsTexts(data.blocks);
+      const { patch, changes, skipped } = mergeOsRewrite(pickOsTexts(currentOs.current), submitted, validated);
+      if (changes.length) {
+        setOs((prev) => ({ ...prev, ...patch }));
+        setDirty(true);
+        setAiChanges(changes);
+      }
+      const feedback = changes.length
+        ? `${changes.length} ${changes.length === 1 ? "campo atualizado" : "campos atualizados"}: ${changes.map((c) => OS_TEXT_LABELS[c.key]).join(", ")}. As alterações já aparecem no documento e no painel. Revise e clique em Salvar.`
+        : "Nenhum texto foi substituído. A IA devolveu o mesmo conteúdo ou os campos foram editados durante a revisão.";
+      const conflicts = skipped.length ? ` Mantidos os campos que você continuou editando: ${skipped.map((key) => OS_TEXT_LABELS[key]).join(", ")}.` : "";
+      setAiFeedback(feedback + conflicts);
+      setNotice(feedback + conflicts);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "IA indisponível no momento.");
+      if (!controller.signal.aborted) setAiError(err instanceof Error ? err.message : "Não foi possível reescrever. Os textos foram preservados.");
     } finally {
+      aiRequest.current = null;
       setAiBusy(false);
     }
   }
+
+  function undoAiRewrite() {
+    const patch: Record<string, string> = {};
+    for (const change of aiChanges) {
+      if (currentOs.current[change.key] === change.after) patch[change.key] = change.before;
+    }
+    if (Object.keys(patch).length) {
+      setOs((prev) => ({ ...prev, ...patch }));
+      setDirty(true);
+    }
+    setAiChanges([]);
+    const message = "Revisão desfeita nos campos que não foram editados depois da IA. Confira o documento antes de salvar.";
+    setAiFeedback(message);
+    setNotice(message);
+  }
+
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -239,6 +278,7 @@ export function ServiceOrderEditor({
       const [{ jsPDF }, pdfKit] = await Promise.all([import("jspdf"), import("@/lib/pdf-documents")]);
       const logo = await pdfKit.loadBrandLogo();
       const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+      await pdfKit.loadDocumentFonts(pdf);
       pdfKit.renderServiceOrderPdf(pdf, os, settings, logo);
       pdf.save(`${os.number}-${os.clientName.replace(/\s+/g, "-")}.pdf`);
     } catch (err) {
@@ -506,21 +546,46 @@ export function ServiceOrderEditor({
           <Panel title="Laudo técnico" hint="Alimenta o orçamento gerado">
             <div className="flex items-center justify-between gap-2">
               <div className="text-[10.5px] leading-relaxed text-steel">
-                Reescreve os textos em linguagem formal, preservando fatos, números e prazos.
+                Usa o texto atual, mesmo sem salvar. Corrige a redação sem acrescentar serviços ou alterar números.
               </div>
-              <button className="btn !border-signal/40 !text-signal px-3 py-1.5 text-[11px]" onClick={() => void rewriteWithAI()} disabled={aiBusy}>
+              <button className="btn !border-signal/40 !text-signal px-3 py-1.5 text-[11px]" onClick={() => void rewriteWithAI()} disabled={aiBusy || saving}>
                 {aiBusy ? <LoaderCircle size={12} className="animate-spin" /> : <Sparkles size={12} />}
                 {aiBusy ? "Reescrevendo…" : "Refinar com IA"}
               </button>
             </div>
+            <p className="text-[11px] leading-relaxed text-silver">
+              Os textos atuais serão enviados ao provedor de IA configurado. Não é preciso salvar antes; salve após revisar o resultado.
+            </p>
+            {aiError ? <p role="alert" className="rounded-lg border border-alarm/40 bg-alarm/5 p-3 text-[12px] leading-relaxed text-alarm">{aiError}</p> : null}
+            {aiFeedback ? <p role="status" className="rounded-lg border border-signal/30 bg-signal/5 p-3 text-[12px] leading-relaxed text-silver">{aiFeedback}</p> : null}
+            {aiChanges.length > 0 ? (
+              <div className="space-y-2 rounded-lg border border-signal/30 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <strong className="text-[12px] text-signal">Revisão aplicada ao documento</strong>
+                  <button type="button" className="btn px-2 py-1 text-[11px]" onClick={undoAiRewrite}>Desfazer IA</button>
+                </div>
+                {aiChanges.map((change) => (
+                  <details key={change.key} className="rounded-md border border-line/60 p-2">
+                    <summary className="cursor-pointer text-[12px] font-medium text-white">{OS_TEXT_LABELS[change.key]} · antes e depois</summary>
+                    <div className="mt-2 space-y-2 text-[12px] leading-relaxed">
+                      <div><span className="font-semibold text-silver">Antes</span><p className="whitespace-pre-wrap text-silver">{change.before || "(vazio)"}</p></div>
+                      <div><span className="font-semibold text-signal">Depois</span><p className="whitespace-pre-wrap text-white">{change.after}</p></div>
+                    </div>
+                  </details>
+                ))}
+              </div>
+            ) : null}
+            <Field label="Solicitação / defeito relatado">
+              <textarea className="field min-h-[90px] text-[13px] leading-relaxed" aria-label="Solicitação / defeito relatado" value={os.description} onChange={(e) => update({ description: e.target.value })} />
+            </Field>
             <Field label="Diagnóstico">
-              <textarea className="field min-h-[70px]" value={os.diagnosis} onChange={(e) => update({ diagnosis: e.target.value })} />
+              <textarea className="field min-h-[70px]" aria-label="Diagnóstico" value={os.diagnosis} onChange={(e) => update({ diagnosis: e.target.value })} />
             </Field>
             <Field label="Solução executada / proposta">
-              <textarea className="field min-h-[70px]" value={os.solution} onChange={(e) => update({ solution: e.target.value })} />
+              <textarea className="field min-h-[70px]" aria-label="Solução executada / proposta" value={os.solution} onChange={(e) => update({ solution: e.target.value })} />
             </Field>
             <Field label="Observações ao cliente">
-              <textarea className="field min-h-[60px]" value={os.notes} onChange={(e) => update({ notes: e.target.value })} />
+              <textarea className="field min-h-[60px]" aria-label="Observações ao cliente" value={os.notes} onChange={(e) => update({ notes: e.target.value })} />
             </Field>
             <Field label="Recebedor do serviço">
               <input className="field" value={os.clientSignature} onChange={(e) => update({ clientSignature: e.target.value })} placeholder="Nome de quem conferiu" />

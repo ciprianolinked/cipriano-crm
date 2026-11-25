@@ -79,6 +79,28 @@ npm exec tsc -- --noEmit --pretty false
 npm run build
 ```
 
+## Documentos e revisão de OS
+
+- Propostas, OS, contratos e termos de entrega incorporam IBM Plex Sans, IBM Plex Mono e Space Grotesk nos PDFs. Os arquivos TTF e as licenças ficam em `public/fonts/` e entram no ZIP de publicação. Não omita essa pasta no deploy.
+- Os documentos usam texto escuro e rótulos seminegritos em fundo branco/claro. Gere o PDF novamente após publicar; arquivos já baixados não são atualizados.
+- A revisão da OS envia o rascunho atual do editor, inclusive alterações ainda não salvas. A API retorna os quatro campos em JSON; não grava automaticamente no banco.
+- O editor mostra campos alterados, antes/depois e **Desfazer IA**. Edits feitos durante a requisição não são sobrescritos. Confirme a revisão com **Salvar**.
+- `OPENAI_API_KEY` é obrigatória apenas para a revisão generativa; `OPENAI_MODEL` (padrão: `gpt-4o-mini`) e `OPENAI_BASE_URL` são opcionais. Erros de chave, créditos, conexão e resposta inválida aparecem junto ao botão, sem simular sucesso.
+
+### Testes de regressão
+
+```bash
+# Testes locais; chamadas ao provedor de IA são simuladas, sem custo externo.
+npx tsx --test tests/os-rewrite.test.ts tests/document-output.test.ts
+# Requer banco local preparado; cria e remove sua própria OS de teste.
+npx tsx --test tests/os-rewrite-route.test.ts
+# Requer a aplicação em localhost:3000 (ou TEST_BASE_URL).
+npx playwright install --with-deps chromium
+node tests/os-editor.browser.mjs
+```
+
+O teste de navegador verifica envio do texto não salvo, atualização do documento, desfazer, salvamento, erro do provedor, download de PDF, impressão e presença das fontes na exportação. As chamadas generativas são simuladas: isso não substitui um teste com a chave do ambiente de produção.
+
 ## Segurança e dados
 
 - O ZIP contém apenas código/configuração/assets públicos, não um dump do banco.

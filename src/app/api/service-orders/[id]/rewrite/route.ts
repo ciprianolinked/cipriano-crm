@@ -3,83 +3,56 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { serviceOrders } from "@/db/schema";
 import { ensureSchema } from "@/lib/db-migrations";
-import { maybePolishWithLLM } from "@/lib/ai";
+import { normalizeOsText, OS_TEXT_FIELDS, OS_TEXT_LABELS, readOsTexts } from "@/lib/os-rewrite";
+import { OsRewriteError, rewriteOsTexts } from "@/lib/os-rewrite-ai";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MARK = "@@@BLOCO@@@";
+const json = (body: unknown, status = 200) => NextResponse.json(body, {
+  status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
+});
 
-const PARTS = [
-  { key: "description", label: "SOLICITAÇÃO", hint: "descreva a solicitação, o defeito informado pelo cliente ou a necessidade de serviço, mantendo todos os fatos, datas e valores." },
-  { key: "diagnosis", label: "DIAGNÓSTICO TÉCNICO", hint: "descreva o que foi identificado em campo, com o mesmo detalhe técnico que você escreveu." },
-  { key: "solution", label: "SOLUÇÃO EXECUTADA / PROPOSTA", hint: "descreva o serviço executado e/ou a solução proposta, mantendo peças, quantidades e procedimentos." },
-  { key: "notes", label: "OBSERVAÇÕES", hint: "redija os combinados e avisos para o cliente com tom formal." },
-] as const;
-
-type PartKey = (typeof PARTS)[number]["key"];
-
-/** Reescreve os textos da OS com linguagem formal, preservando TODOS os fatos escritos pelo usuário. */
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  await ensureSchema();
+/** Draft in, suggested text out. No database writes and no reliance on saved text. */
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [os] = await db.select().from(serviceOrders).where(eq(serviceOrders.id, id)).limit(1);
-  if (!os) return NextResponse.json({ error: "OS não encontrada." }, { status: 404 });
-
-  const source = [
-    ["description", os.description],
-    ["diagnosis", os.diagnosis],
-    ["solution", os.solution],
-    ["notes", os.notes],
-  ] as [PartKey, string][];
-
-  const sections = source
-    .map(([key, text]) => {
-      const part = PARTS.find((p) => p.key === key)!;
-      return `${part.label}:\n${String(text ?? "").trim() || "(vazio)"}`;
-    })
-    .join(`\n\n${MARK}\n\n`);
-
-  if (!sections.includes("(vazio)") && sections.trim().length > 0) {
-    // tudo preenchido — segue normalmente
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return json({ error: "Identificador de OS inválido.", code: "invalid_id" }, 400);
   }
-
-  const polished = await maybePolishWithLLM({
-    system:
-      "Você é um engenheiro de segurança eletrônica redigindo documentos formais de trabalho (ordem de serviço) em português formal e objetivo, no padrão de uma engenharia de serviços técnicos prestados em campo. Reescreva APENAS os blocos fornecidos, preservando com fidelidade TODOS os fatos: números, datas, valores, modelos, quantidades, procedimentos, nomes, localidades e contatos. Não invente nada que não conste no texto de origem; se o bloco estiver vazio, devolva-o vazio. Não acrescente itens, não invente garantias, não prometa resultados. Separe os blocos reescritos com a linha exata @@@BLOCO@@@, na mesma ordem, sem títulos extras e sem formatação markdown.",
-    prompt: `OS ${os.number} · Cliente ${os.clientName} · Local ${os.site ?? "—"} · Tipo: ${os.kind} · Status: ${os.status}\n\n${sections}`,
-  });
-
-  if (!polished || !polished.includes(MARK)) {
-    return NextResponse.json(
-      { error: "IA generativa indisponível no momento (sem OPENAI_API_KEY no servidor). O texto atual foi preservado." },
-      { status: 503 },
-    );
+  if (Number(request.headers.get("content-length") ?? 0) > 128000) {
+    return json({ error: "O texto enviado excede o limite de revisão.", code: "input_too_large" }, 413);
   }
-
-  const parts = polished.split(MARK).map((p) => p.trim());
-  const result: Record<PartKey, string> = { description: "", diagnosis: "", solution: "", notes: "" };
-  PARTS.forEach((part, index) => {
-    const text = parts[index] ?? "";
-    if (text && text !== "(vazio)" && text !== "(vazio)") result[part.key] = text;
-  });
-  // Se a IA devolveu menos blocos do que pedimos, mantém os textos originais vazios intactos.
-  for (const [key, text] of source) {
-    if (!result[key] && String(text ?? "").trim()) result[key] = String(text).trim();
+  const body: unknown = await request.json().catch(() => null);
+  let source;
+  try {
+    source = readOsTexts(body && typeof body === "object" && "blocks" in body ? body.blocks : null);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Envie os textos atuais da OS.", code: "invalid_draft" }, 400);
   }
-
-  const changed = (Object.keys(result) as PartKey[]).filter(
-    (key) => result[key] !== String(os[key as keyof typeof os] ?? "").trim(),
-  );
-
-  return NextResponse.json({
-    blocks: result,
-    changed,
-    source: "llm",
-    message:
-      changed.length === 0
-        ? "A IA entendeu que seu texto já está formal. Nada foi alterado."
-        : `Reescrito por IA: ${changed.map((k) => PARTS.find((p) => p.key === k)?.label.toLowerCase()).join(", ")}. Revise e salve.`,
-  });
+  if (OS_TEXT_FIELDS.every((key) => !source[key].trim())) {
+    return json({ error: "Escreva a solicitação, o diagnóstico ou a solução antes de pedir a revisão.", code: "empty_draft" }, 400);
+  }
+  try {
+    await ensureSchema();
+    // Only the record identity and context are read. The text comes from the live editor.
+    const [os] = await db.select({ id: serviceOrders.id, kind: serviceOrders.kind, status: serviceOrders.status })
+      .from(serviceOrders).where(eq(serviceOrders.id, id)).limit(1);
+    if (!os) return json({ error: "OS não encontrada.", code: "not_found" }, 404);
+    const context = body && typeof body === "object" && "context" in body ? body.context : null;
+    const kind = context && typeof context === "object" && "kind" in context && typeof context.kind === "string" ? context.kind.slice(0, 60) : os.kind;
+    const status = context && typeof context === "object" && "status" in context && typeof context.status === "string" ? context.status.slice(0, 60) : os.status;
+    const blocks = await rewriteOsTexts(source, { kind, status });
+    const changed = OS_TEXT_FIELDS.filter((key) => normalizeOsText(blocks[key]) !== normalizeOsText(source[key]));
+    return json({
+      blocks, changed, source: "llm",
+      message: changed.length
+        ? `Revisão concluída: ${changed.map((key) => OS_TEXT_LABELS[key]).join(", ")}. Confira as alterações e salve a OS.`
+        : "A IA devolveu o mesmo texto. Nenhuma alteração foi aplicada; a versão atual foi mantida.",
+    });
+  } catch (error) {
+    if (error instanceof OsRewriteError) return json({ error: error.message, code: error.code }, error.status);
+    console.error("[os/rewrite] Não foi possível concluir a revisão.");
+    return json({ error: "Não foi possível revisar a OS agora. Seus textos foram preservados.", code: "rewrite_failed" }, 503);
+  }
 }

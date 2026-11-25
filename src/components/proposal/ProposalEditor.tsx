@@ -22,6 +22,9 @@ import {
   defaultComodato,
 } from "@/lib/proposal/comodato";
 import { useLiveList } from "@/lib/use-live-list";
+import { Plus } from "lucide-react";
+import { CatalogPicker } from "@/components/proposal/CatalogPicker";
+import { catalogToItem, finalizeItems, internalMarginCents, isIndirectItem, pricingFrom, setItemPrice } from "@/lib/proposal/pricing";
 import { ProposalDocument, type DocData, type DocEdit, type DocSettings } from "@/components/proposal/ProposalDocument";
 import { PrintActions } from "@/components/proposal/PrintActions";
 import { ProposalDeleteButton } from "@/components/proposal/ProposalDeleteButton";
@@ -95,7 +98,7 @@ export function ProposalEditor({
   const [dirty, setDirty] = useState(false);
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [newActivity, setNewActivity] = useState({ kind: "seguimento", content: "", dueAt: "" });
-  const [catalogPick, setCatalogPick] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
   // Catálogo recarregado ao voltar para a aba: itens cadastrados em outra aba aparecem aqui.
   const catalogLive = useLiveList<EditorCatalogItem>(
     "/api/catalog",
@@ -106,10 +109,11 @@ export function ProposalEditor({
   const catalog = catalogLive.items;
   const [revisions, setRevisions] = useState<EditorRevision[]>(initialRevisions);
   const [revisionBusy, setRevisionBusy] = useState(false);
-  const [miscPctInput, setMiscPctInput] = useState(8);
-  const [infraPctInput, setInfraPctInput] = useState(10);
-  const [marginPctInput, setMarginPctInput] = useState(5);
-  const [laborValueInput, setLaborValueInput] = useState(2800);
+  const [pricingInput, setPricingInput] = useState(() => pricingFrom(initial.briefing));
+  const [laborValueInput, setLaborValueInput] = useState(() => {
+    const labor = initial.items.find((i) => /^Mão de obra técnica/.test(i.desc));
+    return labor ? labor.price : 2800;
+  });
 
   const maintenanceProposal = isMaintenanceProposal(proposal.briefing);
   const monthly = maintenanceSummary(proposal.items, proposal.discountPct, proposal.briefing);
@@ -227,7 +231,16 @@ export function ProposalEditor({
   }
 
   function patchItem(id: string, patch: Partial<ProposalItem>) {
-    updateWith((prev) => ({ items: prev.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) }));
+    updateWith((prev) => {
+      const config = pricingFrom(prev.briefing);
+      return {
+        items: prev.items.map((item) => {
+          if (item.id !== id) return item;
+          const next = { ...item, ...patch };
+          return patch.price !== undefined ? setItemPrice(next, Number(patch.price) || 0, config) : next;
+        }),
+      };
+    });
   }
 
   /** Ações de edição direta usadas pelo documento: cada texto alterado atualiza o painel ao lado. */
@@ -239,6 +252,18 @@ export function ProposalEditor({
           s.id === sectionId ? { ...s, rows: (s.rows ?? []).map((r, i) => (i === index ? { ...r, ...patch } : r)) } : s,
         ),
       })),
+    addRow: (sectionId) =>
+      updateWith((prev) => ({
+        sections: prev.sections.map((s) =>
+          s.id === sectionId
+            ? { ...s, rows: [...(s.rows ?? []), { label: "Nova frente", cipriano: "Escopo Cipriano", client: "A cargo do cliente" }] }
+            : s,
+        ),
+      })),
+    removeRow: (sectionId, index) =>
+      updateWith((prev) => ({
+        sections: prev.sections.map((s) => (s.id === sectionId ? { ...s, rows: (s.rows ?? []).filter((_, i) => i !== index) } : s)),
+      })),
     proposal: (patch) => updateWith(() => patch),
     value: (patch) => patchValueBlock(patch),
     item: (id, patch) => patchItem(id, patch),
@@ -249,25 +274,15 @@ export function ProposalEditor({
     update({ items: proposal.items.filter((i) => i.id !== id) });
   }
 
-  function addFromCatalog(id: string) {
-    const item = catalog.find((c) => c.id === id);
-    if (!item) return;
-    update({
-      items: [
-        ...proposal.items,
-        {
-          id: uid(),
-          kind: item.kind === "servico" ? "servico" : "equipamento",
-          desc: item.description,
-          spec: item.spec ?? "",
-          unit: item.unit,
-          qty: 1,
-          price: item.priceCents / 100,
-          scope: item.category,
-        },
-      ],
-    });
-    setCatalogPick("");
+  /** Inclui itens do catálogo (popup). A margem de segurança é composta no preço final automaticamente. */
+  function addCatalogEntries(entries: { entry: (typeof catalog)[number]; qty: number }[]) {
+    updateWith((prev) => ({
+      items: finalizeItems(
+        [...prev.items, ...entries.map(({ entry, qty }) => catalogToItem(entry, qty))],
+        pricingFrom(prev.briefing),
+      ),
+    }));
+    setDirty(true);
   }
 
   function addRowToTableSection(sectionId: string) {
@@ -307,76 +322,41 @@ export function ProposalEditor({
     patchSection(sectionId, { columns: cols });
   }
 
-  function applyEngineeringCosts(miscPct = 8, infraPct = 10, marginPct = 5, laborVal = 2800) {
-    const baseEquipment = proposal.items.filter(
-      (it) =>
-        it.kind === "equipamento" &&
-        !it.desc.startsWith("Miscelâneas") &&
-        !it.desc.startsWith("Infraestrutura seca") &&
-        !it.desc.startsWith("Margem de segurança"),
-    );
-    const equipSubtotal = baseEquipment.reduce((sum, it) => sum + it.qty * it.price, 0);
-
-    const otherItems = proposal.items.filter(
-      (it) =>
-        !it.desc.startsWith("Miscelâneas") &&
-        !it.desc.startsWith("Infraestrutura seca") &&
-        !it.desc.startsWith("Margem de segurança") &&
-        !it.desc.startsWith("Mão de obra técnica"),
-    );
-
-    const newItems = [...otherItems];
-    if (equipSubtotal > 0) {
-      if (miscPct > 0) {
-        newItems.push({
-          id: uid(),
-          kind: "equipamento",
-          desc: "Miscelâneas de instalação e fixação",
-          spec: `Conectores blindados, buchas, parafusos, abraçadeiras, caixas de passagem e vedação (${miscPct}% sobre equipamentos)`,
-          unit: "vb",
-          qty: 1,
-          price: Math.round((equipSubtotal * miscPct) / 100),
-          scope: "Rede e Infraestrutura",
-        });
+  /** Recalcula miscelâneas, infraestrutura e margem a partir dos equipamentos, e atualiza a mão de obra. */
+  function applyCosts() {
+    updateWith((prev) => {
+      const config = { ...pricingFrom(prev.briefing), ...pricingInput };
+      const withoutIndirect = prev.items.filter((item) => !isIndirectItem(item));
+      let items = finalizeItems(withoutIndirect, config);
+      const laborIndex = items.findIndex((item) => /^Mão de obra técnica/.test(item.desc));
+      if (laborIndex >= 0) {
+        items = items.map((item, index) => (index === laborIndex ? { ...item, price: laborValueInput } : item));
+      } else if (laborValueInput > 0 && prev.items.some((item) => item.kind === "servico")) {
+        items = [
+          ...items,
+          {
+            id: `labor-${Date.now().toString(36)}`,
+            kind: "servico",
+            desc: "Mão de obra técnica de instalação e comissionamento",
+            spec: "Fixação física, passagem de cabos, conectorização, configuração de software, testes e entrega técnica",
+            unit: "vb",
+            qty: 1,
+            price: laborValueInput,
+            scope: "Projeto e Serviços Técnicos",
+          },
+        ];
       }
-      if (infraPct > 0) {
-        newItems.push({
-          id: uid(),
-          kind: "equipamento",
-          desc: "Infraestrutura seca, eletrodutos e canaletas",
-          spec: `Eletrodutos rígidos/flexíveis, canaletas de proteção, curvas, conexões e suportes (${infraPct}% sobre equipamentos)`,
-          unit: "vb",
-          qty: 1,
-          price: Math.round((equipSubtotal * infraPct) / 100),
-          scope: "Rede e Infraestrutura",
-        });
-      }
-      if (marginPct > 0) {
-        newItems.push({
-          id: uid(),
-          kind: "equipamento",
-          desc: "Margem de segurança e contingência técnica",
-          spec: `Reserva técnica para adequações de campo, sobras de cabos e tolerância técnica (${marginPct}% sobre equipamentos)`,
-          unit: "vb",
-          qty: 1,
-          price: Math.round((equipSubtotal * marginPct) / 100),
-          scope: "Itens Complementares",
-        });
-      }
-    }
-    if (laborVal > 0) {
-      newItems.push({
-        id: uid(),
-        kind: "servico",
-        desc: "Mão de obra técnica de instalação e comissionamento",
-        spec: "Fixação física, passagem de cabos, conectorização, configuração de software, testes e entrega técnica",
-        unit: "vb",
-        qty: 1,
-        price: laborVal,
-        scope: "Projeto e Serviços Técnicos",
-      });
-    }
-    update({ items: newItems });
+      return {
+        items,
+        briefing: {
+          ...(prev.briefing ?? {}),
+          miscPct: config.miscPct,
+          infraPct: config.infraPct,
+          marginPct: config.marginPct,
+          laborValue: laborValueInput,
+        },
+      };
+    });
   }
 
   async function save(extra?: Partial<EditorProposal>) {
@@ -530,6 +510,12 @@ export function ProposalEditor({
 
   return (
     <div className="min-h-screen bg-abyss">
+      <CatalogPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        entries={catalog}
+        onAdd={(entry, qty) => addCatalogEntries([{ entry, qty }])}
+      />
       <header className="no-print sticky top-0 z-30 border-b border-line/60 bg-abyss/95 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
@@ -1027,47 +1013,34 @@ export function ProposalEditor({
               ) : null}
 
               {!maintenanceProposal ? (
-                <Panel title="Custos indiretos e mão de obra" hint="Calculados sobre os equipamentos desta proposta">
+                <Panel title="Custos indiretos e mão de obra" hint="Miscelâneas e infraestrutura aparecem na proposta; a margem compõe os preços e fica só aqui">
                   <div className="grid grid-cols-2 gap-2">
                     <Field label="Miscelâneas (%)">
-                      <input type="number" min={0} max={100} className="field" value={miscPctInput} onChange={(e) => setMiscPctInput(Number(e.target.value))} />
+                      <input type="number" min={0} max={100} className="field" value={pricingInput.miscPct} onChange={(e) => setPricingInput((p) => ({ ...p, miscPct: Number(e.target.value) }))} />
                     </Field>
                     <Field label="Infraestrutura (%)">
-                      <input type="number" min={0} max={100} className="field" value={infraPctInput} onChange={(e) => setInfraPctInput(Number(e.target.value))} />
+                      <input type="number" min={0} max={100} className="field" value={pricingInput.infraPct} onChange={(e) => setPricingInput((p) => ({ ...p, infraPct: Number(e.target.value) }))} />
                     </Field>
                     <Field label="Margem de segurança (%)">
-                      <input type="number" min={0} max={100} className="field" value={marginPctInput} onChange={(e) => setMarginPctInput(Number(e.target.value))} />
+                      <input type="number" min={0} max={100} className="field" value={pricingInput.marginPct} onChange={(e) => setPricingInput((p) => ({ ...p, marginPct: Number(e.target.value) }))} />
                     </Field>
                     <Field label="Mão de obra (R$)">
                       <input type="number" min={0} step={50} className="field" value={laborValueInput} onChange={(e) => setLaborValueInput(Number(e.target.value))} />
                     </Field>
                   </div>
-                  <button
-                    className="btn btn-primary w-full text-[11px]"
-                    onClick={() => applyEngineeringCosts(miscPctInput, infraPctInput, marginPctInput, laborValueInput)}
-                  >
-                    Aplicar custos indiretos e mão de obra
+                  <div className="rounded-lg border border-amber/30 bg-amber/5 p-2.5 text-[11px] leading-relaxed text-silver">
+                    Margem de segurança incluída nos preços: <b className="text-amber">{brl(internalMarginCents(proposal.items) / 100)}</b>. Interna: não aparece no documento nem no PDF.
+                  </div>
+                  <button className="btn btn-primary w-full text-[11px]" onClick={applyCosts}>
+                    Aplicar custos e margem
                   </button>
-                  <p className="text-[10.5px] leading-relaxed text-steel">
-                    Recria as linhas de miscelâneas, infraestrutura, margem e mão de obra a partir dos equipamentos atuais.
-                  </p>
                 </Panel>
               ) : null}
 
               <Panel title="Itens da proposta" hint="Equipamentos e serviços">
-                <div className="flex gap-1.5">
-                  <select className="field" value={catalogPick} onChange={(e) => setCatalogPick(e.target.value)}>
-                    <option value="">Adicionar do catálogo…</option>
-                    {catalog.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.category} · {c.description}
-                      </option>
-                    ))}
-                  </select>
-                  <button className="btn px-3" onClick={() => addFromCatalog(catalogPick)} disabled={!catalogPick}>
-                    +
-                  </button>
-                </div>
+                <button type="button" className="btn btn-primary w-full text-[11.5px]" onClick={() => setPickerOpen(true)} disabled={catalog.length === 0}>
+                  <Plus size={13} /> Abrir catálogo de produtos e serviços
+                </button>
 
                 <div className="space-y-2">
                   {proposal.items.map((item) => (

@@ -153,62 +153,6 @@ export function buildItems(briefing: Briefing, type: ProposalType, artIncluded: 
     );
   }
 
-  // --- CUSTOS INDIRETOS E ENGENHARIA (Miscelâneas, Infraestrutura e Margem de Segurança) ---
-  // Calculados como percentual sobre o subtotal de equipamentos desta proposta
-  const equipmentSubtotal = items
-    .filter((it) => it.kind === "equipamento")
-    .reduce((sum, it) => sum + it.qty * it.price, 0);
-
-  if (equipmentSubtotal > 0) {
-    const miscPct = briefing.miscPct !== undefined ? briefing.miscPct : 8;
-    if (miscPct > 0) {
-      const miscPrice = Math.round((equipmentSubtotal * miscPct) / 100);
-      items.push(
-        item(
-          "equipamento",
-          "Miscelâneas de instalação e fixação",
-          `Conectores blindados, buchas, parafusos, abraçadeiras, caixas de passagem e vedação (${miscPct}% sobre equipamentos)`,
-          "vb",
-          1,
-          miscPrice,
-          "Rede e Infraestrutura",
-        ),
-      );
-    }
-
-    const infraPct = briefing.infraPct !== undefined ? briefing.infraPct : 10;
-    if (infraPct > 0) {
-      const infraPrice = Math.round((equipmentSubtotal * infraPct) / 100);
-      items.push(
-        item(
-          "equipamento",
-          "Infraestrutura seca, eletrodutos e canaletas",
-          `Eletrodutos rígidos/flexíveis, canaletas de proteção, curvas, conexões e suportes (${infraPct}% sobre equipamentos)`,
-          "vb",
-          1,
-          infraPrice,
-          "Rede e Infraestrutura",
-        ),
-      );
-    }
-
-    const marginPct = briefing.marginPct !== undefined ? briefing.marginPct : 5;
-    if (marginPct > 0) {
-      const marginPrice = Math.round((equipmentSubtotal * marginPct) / 100);
-      items.push(
-        item(
-          "equipamento",
-          "Margem de segurança e contingência técnica",
-          `Reserva técnica para adequações de campo, sobras de cabos e tolerância técnica (${marginPct}% sobre equipamentos)`,
-          "vb",
-          1,
-          marginPrice,
-          "Itens Complementares",
-        ),
-      );
-    }
-  }
-
   // --- MÃO DE OBRA E SERVIÇOS TÉCNICOS ---
   if (type !== "produtos_servicos") {
     const laborValue =
@@ -465,7 +409,7 @@ export function buildSections(input: {
       ])}\n\nA documentação é entregue em PDF, organizada por disciplina, e também fica disponível no painel Cipriano do cliente.`
     : `A emissão de ART, o projeto executivo detalhado e a documentação as-built não estão inclusos nesta proposta.\n\nPara obras de maior valor, condomínios e exigências de síndico ou seguradora, recomendamos incluir esse pacote: ele documenta a responsabilidade técnica, garante rastreabilidade e reduz questionamentos futuros. Pode ser acrescido por aditivo, com valor informado à parte.`;
 
-  const parcelas = Math.min(48, Math.max(1, Math.round(briefing.valueBlock?.installments ?? 12)));
+  const parcelas = Math.min(48, Math.max(1, Math.round(briefing.valueBlock?.installments ?? 3)));
   const valor = `O investimento total desta proposta é apresentado abaixo, com desconto comercial já aplicado. Valores em reais (BRL), com impostos inclusos, válidos pela data de emissão.\n\nO resumo de itens, quantidades e preços unitários está detalhado no bloco de produtos e serviços. O parcelamento sugerido é de ${parcelas}× sem juros no cartão corporativo ou conforme condição de pagamento acordada.`;
 
   const condicoes = bullets([
@@ -667,62 +611,7 @@ export function generateProposal(input: {
   };
 }
 
-/**
- * Custos indiretos sobre os equipamentos: miscelâneas, infraestrutura seca e margem de segurança.
- * Recalculado sempre que os equipamentos mudam (inclusive produtos do catálogo).
- * Percentuais em 0 desativam a linha. Não se aplica à manutenção mensal.
- */
-export function indirectCostItems(items: ProposalItem[], briefing: Briefing): ProposalItem[] {
-  const equipmentCents = items
-    .filter((i) => i.kind === "equipamento" && i.auto !== "indirect")
-    .reduce((sum, i) => sum + Math.round(i.price * 100) * Math.max(0, i.qty), 0);
-  if (equipmentCents <= 0) return [];
-  const pct = (value: number | undefined, fallback: number) =>
-    Math.min(100, Math.max(0, value === undefined || Number.isNaN(value) ? fallback : value));
-  const misc = pct(briefing.miscPct, 8);
-  const infra = pct(briefing.infraPct, 10);
-  const margin = pct(briefing.marginPct, 5);
-  const line = (desc: string, spec: string, pctValue: number, scope: string): ProposalItem => ({
-    id: uid("ind"),
-    kind: "equipamento",
-    desc,
-    spec: `${spec} (${pctValue}% sobre equipamentos)`,
-    unit: "vb",
-    qty: 1,
-    price: Math.round((equipmentCents * pctValue) / 100) / 100,
-    scope,
-    auto: "indirect",
-  });
-  const out: ProposalItem[] = [];
-  if (misc > 0)
-    out.push(
-      line(
-        "Miscelâneas de instalação e fixação",
-        "Conectores blindados, buchas, parafusos, abraçadeiras, caixas de passagem e vedação",
-        misc,
-        "Rede e Infraestrutura",
-      ),
-    );
-  if (infra > 0)
-    out.push(
-      line(
-        "Infraestrutura seca, eletrodutos e canaletas",
-        "Eletrodutos rígidos/flexíveis, canaletas de proteção, curvas, conexões e suportes",
-        infra,
-        "Rede e Infraestrutura",
-      ),
-    );
-  if (margin > 0)
-    out.push(
-      line(
-        "Margem de segurança e contingência técnica",
-        "Reserva técnica para adequações de campo, sobras de cabos e tolerância técnica",
-        margin,
-        "Itens Complementares",
-      ),
-    );
-  return out;
-}
+export { finalizeItems as finalizeProposalItems } from "@/lib/proposal/pricing";
 
 export const SECTION_LIBRARY: { title: string; body: string; kind?: ProposalSection["kind"] }[] = [
   {
